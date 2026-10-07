@@ -4,10 +4,15 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install
+RUN npm ci
 
 COPY . .
 
+RUN DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy \
+    ./node_modules/.bin/prisma generate
+
+RUN npm run build
+
 EXPOSE 3000
 
-CMD ["npm", "run", "start:dev"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/main.js"]

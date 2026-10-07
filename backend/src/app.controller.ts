@@ -5,8 +5,12 @@ import { AppService } from './app.service.js';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Get('db-test')
+  getDbStatus() {
+    return this.appService.getDbStatus();
+  }
+  @Get('ready')
+  getReadiness() {
+    return this.appService.getReadiness();
   }
 }
