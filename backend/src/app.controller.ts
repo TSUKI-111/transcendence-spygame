@@ -5,10 +5,11 @@ import { AppService } from './app.service.js';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Get('db-test')
-  getDbStatus() {
-    return this.appService.getDbStatus();
+  @Get('health')
+  getHealth() {
+    return this.appService.getHealth();
   }
+
   @Get('ready')
   getReadiness() {
     return this.appService.getReadiness();

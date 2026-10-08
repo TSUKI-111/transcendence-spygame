@@ -5,17 +5,15 @@ import { PrismaService } from './prisma/prisma.service.js';
 export class AppService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getDbStatus() {
-    const count = await this.prisma.foundationTest.count();
-
+  getHealth() {
     return {
-      database: 'connected',
-      foundationTestRows: count,
+      status: 'ok',
     };
   }
+
   async getReadiness() {
     await this.prisma.$queryRaw`SELECT 1`;
-  
+
     return {
       status: 'ready',
       database: 'connected',
