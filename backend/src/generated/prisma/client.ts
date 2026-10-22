@@ -46,3 +46,18 @@ export { Prisma }
  * 
  */
 export type FoundationTest = Prisma.FoundationTestModel
+/**
+ * Model User
+ * 
+ */
+export type User = Prisma.UserModel
+/**
+ * Model Room
+ * 
+ */
+export type Room = Prisma.RoomModel
+/**
+ * Model RoomPlayer
+ * 
+ */
+export type RoomPlayer = Prisma.RoomPlayerModel

@@ -9,4 +9,7 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/FoundationTest.js'
+export type * from './models/User.js'
+export type * from './models/Room.js'
+export type * from './models/RoomPlayer.js'
 export type * from './commonInputTypes.js'
