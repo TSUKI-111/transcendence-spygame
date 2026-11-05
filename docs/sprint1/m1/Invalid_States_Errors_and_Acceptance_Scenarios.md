@@ -32,7 +32,7 @@
 - If a start request is rejected, no playable game is created.
 - If initialization fails during `ROLE_ASSIGNMENT`, no partially initialized game may remain active.
 - M4 must not announce a successful game start until M1 confirms initialization.
-- Failed initialization does not award XP or produce a normal final-result payload.
+- Failed initialization does not produce a normal final-result notification or leave the room permanently locked.
 
 ## 3. Invalid Game State Transitions
 
@@ -72,7 +72,7 @@
 | Finalization references an unknown game | `GAME_NOT_FOUND` | Reject |
 | Finalization is attempted without a valid terminal outcome | `INVALID_FINALIZATION` | Reject |
 | A finalized winner or termination reason is changed | `GAME_ALREADY_FINALIZED` | Reject conflicting operation |
-| An identical final-result notification is retried | No error required | Process idempotently; do not award XP twice |
+| An identical final-result notification is retried | No error required | Handle idempotently; do not repeat room cleanup or change the outcome |
 | M4 receives an incomplete or inconsistent final result | `INVALID_RESULT_PAYLOAD` | Reject and report integration error |
 
 **Expected behavior**
@@ -81,8 +81,9 @@
 - `TERMINATED` requires an approved no-winner termination condition.
 - A final game outcome cannot be modified once committed.
 - M1 reports each finalized outcome to M4 using the agreed final-result contract.
-- M4 must apply game-history persistence and XP rewards at most once per `gameId`.
-- If M4 persistence fails, M1 retains the same finalized outcome for safe retry.
+- M4 updates the room state and performs safe cleanup according to the agreed one-match-per-room lifecycle; it must not delete a room before the outcome is finalized and required references are handled.
+- If final-result delivery or acknowledgement fails, M1 retains the same finalized outcome for safe retry.
+- Duplicate notifications must not cause duplicate room cleanup.
 
 ## 5. Departure and Reconnection Edge Cases
 
@@ -125,18 +126,18 @@
 | A7 | Valid phase deadline expires | Advance exactly once to the correct phase |
 | A8 | Round ends in a tie, with sufficient eligible players | Begin next round without elimination |
 | A9 | Spy is eliminated through voting | Enter `FINISHED`; Detectives win |
-| A10 | Spy permanently departs without a voting winner | Enter `TERMINATED`; no XP |
+| A10 | Spy permanently departs without a voting winner | Enter `TERMINATED`; no winner |
 | A11 | Disconnected player reconnects before round resolution | Restore authorized state without restarting deadlines |
 | A12 | Player tries to resume after permanent departure | Reject participation |
-| A13 | Identical final-result notification is delivered twice | One stored result; XP applied once |
+| A13 | Identical final-result notification is delivered twice | Same final outcome; room update/cleanup handled only once |
 | A14 | Attempt to change an already finalized winner | Reject; preserve original result |
-| A15 | M4 fails to persist a final result | Preserve M1's finalized outcome for safe retry |
+| A15 | M4 cannot acknowledge or complete final-result handling | Preserve M1's finalized outcome for safe retry; do not corrupt room/game state |
 | A16 | Gameplay action is received after `FINISHED` or `TERMINATED` | Reject; game remains terminal |
 
 ## 8. Responsibilities
 
 - **M1:** Game-start validation, lifecycle transition validation, finalization, authoritative outcomes, and game-level errors.
-- **M4:** Room validation, host authorization, room availability, result persistence, and once-only XP application.
+- **M4:** Room validation, host authorization, room availability, final-result handling, room-state updates, and safe cleanup.
 - **M3:** Error display and correct UI behavior after rejected gameplay operations.
 - **M2:** Authenticated user identity.
 - **M5:** Transport security and infrastructure support.
@@ -148,7 +149,7 @@
 | V1 | Exact shared error codes | Use codes in Tasks 2, 4 and 5 | M1 + M3 + M4 | Open |
 | V2 | Start-game concurrency protection | At most one active game per room | M1 + M4 | Open |
 | V3 | Initialization failure recovery | No partially active game; safe room recovery | M1 + M4 | Open |
-| V4 | Final-result persistence retry mechanism | Retry same result by `gameId` | M1 + M4 | Open |
+| V4 | Final-result notification acknowledgement and retry | Retry the same finalized result by `gameId`; handle room updates once | M1 + M4 | Open |
 | V5 | Administrative cancellation behavior | Not implemented unless approved | M1 + M4 | Open |
 
 **Due dates:** M4 to assign or refresh before integration. These proposed decisions do not represent confirmed team agreements.

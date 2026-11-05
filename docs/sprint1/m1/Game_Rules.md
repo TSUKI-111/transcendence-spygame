@@ -1,6 +1,6 @@
 # M1 — Game Rules
 
-## 2.1 Player Requirements
+## 1 Player Requirements
 
 **Players and Lobby**
 - The game supports **3–8 players**.
@@ -31,7 +31,7 @@
 - Disconnection and reconnection rules are defined in Section 2.7.
 
 
-## 2.2 Secret Word
+## 2 Secret Word
 
 **Secret Word Selection**
 - The Game Engine (M1) randomly selects **one secret word** from a predefined backend word list when a game starts.
@@ -55,7 +55,7 @@
 - If the game terminates without a winner, the Spy's identity and secret word remain hidden.
 
 
-## 2.3 Clues (Relations)
+## 3 Clues (Relations)
 
 **Clue Submission Rules**
 - Each active, non-eliminated player can submit **one accepted clue per round**.
@@ -110,7 +110,7 @@
 - M1 and M3 agree on the realtime events needed for clue submission, immediate clue visibility, and phase transitions.
 
 
-## 2.4 Discussion Phase
+## 4 Discussion Phase
 
 **Discussion Rules**
 - Discussion begins automatically when the **60-second Clue Submission phase** ends.
@@ -138,7 +138,7 @@
 - **M3:** Displays the chat, submitted clues, countdown, and phase updates.
 
 
-## 2.5 Voting Phase
+## 5 Voting Phase
 
 **Voting Rules**
 - Voting begins automatically after the **120-second Discussion phase** ends.
@@ -156,7 +156,7 @@
 - Players who do not vote before the deadline are considered to have abstained.
 - When the deadline expires:
   - No additional votes are accepted.
-  - When the deadline expires, M1 automatically performs round resolution. ROUND_RESOLUTION is a backend operation, not a persistent game phase.
+  - M1 performs round resolution automatically; `ROUND_RESOLUTION` is a backend operation, not a persistent game phase.
 
 **Vote Validation and Results**
 - Before accepting a vote, M1 verifies that:
@@ -186,7 +186,7 @@
 - **M1:** Manages the Voting phase, deadline, vote validation, counting, and transition to Round Resolution.
 - **M3:** Displays the voting interface, countdown, private vote confirmation, and voting outcome.
 
-## 2.6 Elimination and Victory
+## 6 Elimination and Victory
 
 **Elimination Rules**
 - After the 30-second Voting phase ends, the Game Engine (M1) counts valid votes and determines the outcome.
@@ -199,11 +199,6 @@
 - **Detective Victory:** If the Spy is eliminated through voting, the Detectives win.
 - **Spy Victory:** If voting eliminates a Detective and leaves exactly **two active, non-eliminated players**, including the Spy, the Spy wins.
 - If neither victory condition is met, M1 checks permanent departures before starting another round.
-
-**XP Rewards**
-- **Detective Victory:** Every Detective receives **+25 XP**, including previously eliminated Detectives. The Spy receives 0 XP.
-- **Spy Victory:** The Spy receives **+40 XP**. Detectives receive 0 XP.
-- **Termination Without a Winner:** No victory XP is awarded.
 
 **Round Resolution Order**
 - When Voting ends, M1 performs the following operations in order:
@@ -224,16 +219,16 @@
 - A normal victory places the game in the `FINISHED` state.
 - M1 finalizes the game outcome only once and rejects further gameplay actions.
 - The Spy's identity and secret word are revealed after a normal victory, according to Section 2.2.
-- M1 sends the authoritative final winner and participant XP rewards to M4 for persistence and to M3 for display.
-- M4 persists the game result and applies XP rewards **at most once per game**, including when an event or request is retried.
+- M1 sends the authoritative final result, including `gameId`, `roomId`, status, and winner or termination reason, to M4; M3 receives only the gameplay information it is allowed to display.
+- M4 handles room status and cleanup after finalization and may retain the minimal result data required for consistency. Duplicate final-result notifications must not cause repeated cleanup.
 - Disconnection, intentional departure, and termination without a winner follow Section 2.7.
 
 **Implementation Responsibilities**
-- **M1:** Vote resolution, elimination, victory conditions, XP reward calculation, and game finalization.
+- **M1:** Vote resolution, elimination, victory conditions, and game finalization.
 - **M3:** Displays elimination results, revealed roles, new rounds, and final game results.
-- **M4:** Stores game history and applies XP rewards to player progression exactly once.
+- **M4:** Handles room lifecycle after a final result and any minimal internal result storage needed for consistency.
 
-## 2.7 Disconnection and Reconnection
+## 7 Disconnection and Reconnection
 
 **Unexpected Disconnection**
 - When a player disconnects unexpectedly, the backend immediately marks their connection status as `DISCONNECTED`.
@@ -265,7 +260,6 @@
 - If the game can continue after processing departures, the next round begins.
 - Permanently departed players cannot rejoin the ongoing game.
 - Historical participation records remain preserved.
-- A game terminated without a winner awards no victory XP.
 
 **Intentional Departure**
 - Choosing **Leave Game** causes immediate permanent departure, without waiting for round resolution.
@@ -279,7 +273,7 @@
 **Game State and Responsibilities**
 - M1 manages player connection status, game-state restoration, permanent departures, and termination decisions.
 - M3 displays connection-status changes and restores the gameplay interface after reconnection.
-- M4 manages room membership, host ownership, and room updates after game termination.
+- M4 manages room membership, host ownership, and post-game room cleanup under the agreed one-match-per-room policy.
 - M5 provides authenticated WebSocket connections and connection lifecycle support.
 - The backend processes permanent departures and final game outcomes only once.
 - A finished or terminated game cannot return to active gameplay.
