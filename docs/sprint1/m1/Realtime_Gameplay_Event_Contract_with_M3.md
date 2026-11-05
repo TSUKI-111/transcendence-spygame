@@ -100,9 +100,8 @@
   - `status`: `FINISHED` or `TERMINATED`
   - `winner`: `DETECTIVES`, `SPY`, or null.
   - `reason`: Termination reason or null.
-  - `xpAwards`: Per-player XP awards, when the game finishes normally.
 - For `FINISHED`, the event also contains the Spy's identity and secret word for the final revelation.
-- For `TERMINATED`, secret roles and the secret word remain hidden, and no victory XP is awarded.
+- For `TERMINATED`, secret roles and the secret word remain hidden.
 - M3 displays the final result and disables further gameplay inputs.
 
 ## 4. Client-to-Server Actions
@@ -147,6 +146,7 @@
 - Vote choices and intermediate vote counts are never broadcast.
 
 **Identity Rule**
+
 - The backend obtains the acting user's ID from the authenticated Socket.IO connection.
 - M3 does not supply a trusted voter or clue-author ID.
 - Client-supplied user IDs cannot be used to impersonate other players.
@@ -197,7 +197,7 @@
 - **M1:** Authoritative game state, event payloads, private role information, gameplay validation and phase transitions.
 - **M3:** WebSocket client integration, game-state display, countdowns, input controls, action acknowledgements and result screens.
 - **M2:** Authenticated identity and existing room chat functionality, including backend discussion eligibility enforcement.
-- **M4:** Room start/leave events, room membership and game-result persistence.
+- **M4:** Room start/leave events, room membership, and room-state updates and safe cleanup after game finalization.
 - **M5:** WebSocket authentication, secure connections and connection-lifecycle infrastructure.
 
 ## 9. Unconfirmed Integration Decisions

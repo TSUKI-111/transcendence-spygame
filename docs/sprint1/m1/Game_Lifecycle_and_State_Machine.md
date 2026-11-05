@@ -33,7 +33,7 @@
   - No other active game for the same room.
 - If validation fails, M1 rejects the request without creating an active game.
 - If validation succeeds, M1:
-  - Creates the game with a fixed participant roster.
+  - Creates a unique `gameId`, links it to the provided `roomId`, and records the fixed participant roster.
   - Enters `ROLE_ASSIGNMENT`.
   - Randomly selects exactly one Spy.
   - Assigns Detective roles to all remaining participants.
@@ -41,6 +41,7 @@
   - Prepares private role information for every participant; only Detectives receive the word.
   - Initializes Round 1.
   - Automatically enters `CLUE_SUBMISSION` and starts its 60-second deadline.
+- After role assignment completes, M1 returns `gameId`, `roomId`, `CLUE_SUBMISSION`, round number, and the first phase deadline to M4 through the proposed start-game contract.
 - No role-confirmation timer or player acknowledgement is required.
 - M4 remains responsible for room membership and host authorization.
 
@@ -103,27 +104,26 @@
 - If an active Detective leaves and two or fewer active players remain, the game enters `TERMINATED`.
 - Otherwise, gameplay continues in the current phase.
 - The host follows the same gameplay departure rules; M4 handles room ownership.
+- M4 must inform M1 which game and authenticated player intentionally left. M1 updates game participation; M4 owns room membership and host transfer. The exact internal method and room-membership policy are still to be agreed.
 
 ## 7. Terminal States
 
 **FINISHED**
 - Reached after a normal voting victory.
-- Detective victory: +25 XP for every Detective, including eliminated Detectives.
-- Spy victory: +40 XP for the Spy.
 - The Spy's identity and secret word are revealed to game participants.
 - Further gameplay actions are rejected.
 
 **TERMINATED**
 - Reached when an approved no-winner departure condition occurs.
 - The termination reason is recorded.
-- No victory XP is awarded.
 - The secret word and otherwise-hidden Spy identity are not revealed.
 - Further gameplay actions are rejected.
 
 **Finalization**
 - M1 finalizes each game outcome only once.
-- M1 sends the authoritative final result to M4 and the gameplay result to M3.
-- M4 persists game history and applies XP rewards at most once per game.
+- M1 sends an authoritative final result to M4 containing the `gameId`, `roomId`, terminal status (`FINISHED` or `TERMINATED`), winner or termination reason, and finalization time; M3 receives only the public gameplay result.
+- M4 handles room status and safe cleanup after finalization. The exact callback/service method and any minimal terminal-result storage are integration decisions; full match-history and progression features are out of scope.
+- A separate administrative Cancel Game operation remains an open decision with M4.
 - Terminal states cannot transition back to active gameplay.
 
 ## 8. Invalid Transitions and Actions
@@ -141,15 +141,15 @@
 
 ## 9. Cross-Module Responsibilities
 
-- **M1:** Game initialization, role assignment, secret word, phases, deadlines, voting, elimination, departures, victories, termination, and XP calculation.
+- **M1:** Game initialization, role assignment, secret word, phases, deadlines, voting, elimination, departures, victories, termination, and authoritative final-result reporting.
 - **M2:** User authentication and room chat, including backend discussion eligibility enforcement.
 - **M3:** Gameplay UI, private role display, countdowns, clues, voting, reconnection interface, and final results.
-- **M4:** Room membership, host authorization, game-start integration, host ownership, game history, and XP persistence.
+- **M4:** Room membership, host authorization, game-start integration, host ownership, and post-game room status/cleanup.
 - **M5:** WebSocket authentication, connection infrastructure, and security support.
 
 ## 10. Sprint 1 Integration Dependencies
 
-- **M1 ↔ M4:** Agree on the start-game request, start confirmation, completion and termination reporting, and final-result payload.
+- **M1 ↔ M4:** Agree on the start-game request and confirmation, intentional Leave Game notification, completion/termination reporting, final-result payload, and safe room cleanup.
 - **M1 ↔ M3:** Agree on phase names, deadlines, private role delivery, gameplay events, and state restoration.
 - **M1 ↔ M2/M5:** Confirm how authenticated user IDs and connection events reach the Game Engine.
 - **Open decision:** Define whether M4 needs administrative cancellation behavior beyond the existing no-winner termination rules.

@@ -1,53 +1,43 @@
 # M1 — Final-Result, Completion and Cancellation Contract
 
-**Sprint 1 — Task 3: Game Engine & Rooms Integration**
+**Sprint 1 — Task 3: Game Engine & Rooms Integration**  
+**Status:** Updated for the team-approved simplified scope — exact M1/M4 integration interface awaiting confirmation.
 
-**Status:** Proposed by M1 — awaiting M4 confirmation.
+## Purpose
 
-### Purpose
+- M1 determines when a game reaches its final outcome and reports that outcome to M4.
+- M4 handles the affected room's status and safe cleanup after the game ends.
+- M3 displays only the final information players are authorized to see.
+- Each game has one immutable final outcome.
+- The project no longer includes XP, levels, leaderboards, or player-facing match history.
 
-- M1 determines when a game has reached a final outcome.
-- M1 sends the authoritative final result to M4.
-- M4 stores game history and applies XP rewards.
-- M3 displays the gameplay result using the information M1 permits players to see.
-- A game may have only one final outcome.
-
-### Final Game Outcomes
+## Final Game Outcomes
 
 **Normal Completion — `FINISHED`**
-- Triggered by a victory through normal voting.
-- If the Spy is eliminated, Detectives win.
+- Triggered by victory through normal voting.
+- If the Spy is eliminated through voting, Detectives win.
 - If a Detective is eliminated by voting and exactly two active players remain, including the Spy, the Spy wins.
-- Detective victory awards +25 XP to every Detective, including previously eliminated Detectives.
-- Spy victory awards +40 XP to the Spy.
-- The Spy's identity and secret word are revealed to game participants after victory.
+- The Spy's identity and secret word are revealed to game participants after normal victory.
 
-**Termination Without Winner — `TERMINATED`**
-- Triggered by a permanent Spy departure or insufficient active players following permanent departures.
-- `winner` is `null`.
-- Every participant receives 0 victory XP.
-- The termination reason is recorded.
-- Secret roles and the secret word are not revealed to participants through the termination result.
+**Termination Without a Winner — `TERMINATED`**
+- Triggered by permanent Spy departure or insufficient active players following permanent departures.
+- `winner` is `null`; the termination reason is recorded.
+- The secret word and otherwise-hidden Spy identity are not revealed to players.
 
-### Final-Result Payload
+## Final-Result Payload
 
-**Proposed M1 → M4 operation:** `onGameFinalized(result)`
+**Proposed M1 → M4 operation:** `onGameFinalized(result)` — an internal service/callback call, not a finalized API.
 
 **Example — Detective victory:**
 
 ```json
 {
   "gameId": "game-456",
-  "roomId": "room-123",
+  "roomId": "a8c2b50e-9f33-4d8b-8117-28d9a2b6e573",
   "status": "FINISHED",
   "winner": "DETECTIVES",
   "reason": null,
-  "participants": [
-    { "userId": "user-101", "role": "SPY", "xpAwarded": 0 },
-    { "userId": "user-102", "role": "DETECTIVE", "xpAwarded": 25 },
-    { "userId": "user-103", "role": "DETECTIVE", "xpAwarded": 25 }
-  ],
-  "endedAt": "2026-11-02T12:15:00Z"
+  "endedAt": "2026-11-05T12:15:00Z"
 }
 ```
 
@@ -56,102 +46,97 @@
 ```json
 {
   "gameId": "game-789",
-  "roomId": "room-123",
+  "roomId": "a8c2b50e-9f33-4d8b-8117-28d9a2b6e573",
   "status": "TERMINATED",
   "winner": null,
   "reason": "SPY_DEPARTED",
-  "participants": [
-    { "userId": "user-101", "role": "SPY", "xpAwarded": 0 },
-    { "userId": "user-102", "role": "DETECTIVE", "xpAwarded": 0 },
-    { "userId": "user-103", "role": "DETECTIVE", "xpAwarded": 0 }
-  ],
-  "endedAt": "2026-11-02T12:10:00Z"
+  "endedAt": "2026-11-05T12:10:00Z"
 }
 ```
 
 **Payload Rules**
-- `gameId` and `roomId` identify the game and its room.
-- `status` is `FINISHED` or `TERMINATED`.
-- `winner` is `DETECTIVES`, `SPY`, or `null`.
-- `reason` is `null` for normal victory; proposed termination reasons are `SPY_DEPARTED` and `INSUFFICIENT_PLAYERS`.
-- `participants` contains the complete original participant roster with each player's role and calculated victory XP.
-- `endedAt` is the authoritative server-generated UTC finalization timestamp.
-- The secret word, individual votes, and round clues are not required in M4's minimum final-result payload.
-- Role information in this internal payload must not be exposed through unauthorized public responses.
+- `gameId`: Unique game identifier owned by M1.
+- `roomId`: Identifier of the associated M4 room; included so M4 knows which room to update or clean up.
+- `status`: `FINISHED` or `TERMINATED`.
+- `winner`: `DETECTIVES`, `SPY`, or `null`.
+- `reason`: `null` for a normal victory. Proposed no-winner reasons are `SPY_DEPARTED` and `INSUFFICIENT_PLAYERS`.
+- `endedAt`: Server-generated UTC timestamp of authoritative game finalization.
+- The minimum M4 notification does **not** include XP awards, private roles, secret words, individual votes, or clues. M1 retains the fixed participant roster internally for gameplay correctness.
+- Actual ID types and delivery method must match the team's shared backend interfaces.
 
-### When a Result Becomes Final
+## When a Result Becomes Final
 
-- A result becomes final when M1 successfully commits the transition to `FINISHED` or `TERMINATED`.
-- M1 determines and freezes the winner, termination reason, and participant XP awards at that point.
-- M1 communicates the result to M4 and the permitted gameplay result to M3.
-- After finalization, no gameplay actions or additional rounds are allowed.
-- Final outcomes cannot be changed by later disconnects, reconnections, voting requests, or retries.
-- M1 must not finalize the same game with two different outcomes.
+- M1 finalizes the result when it commits the game to `FINISHED` or `TERMINATED`.
+- At that moment M1 freezes the status, winner or termination reason, and finalization time.
+- M1 notifies M4 with the same authoritative result and sends the permitted outcome to M3.
+- No further gameplay actions or rounds are allowed.
+- Later disconnects, reconnections, leave actions, and repeated notifications cannot change the finalized outcome.
 
-### M4 Persistence and XP
+## M4 Room Status and Safe Cleanup
 
-- M4 stores one final game result per `gameId`.
-- M4 applies the XP amounts calculated by M1.
-- XP must be awarded at most once per game, even if the final-result notification is received multiple times.
-- If result delivery or persistence fails, the same finalized result must remain available for safe retry.
-- M1 and M4 must agree on the acknowledgement and retry mechanism.
-- M4 updates room state after game completion or termination according to its room lifecycle rules.
+- M4 updates the room status after receiving the authoritative final notification.
+- Under the agreed simplified **one-match-per-room** scope, the room does not start a second match.
+- M4 may clean up an empty room only after M1's game is terminal and the necessary game/room database references have been handled safely.
+- M4 owns room membership, host ownership, room status, and deletion policy; M1 does not delete rooms.
+- M1 and M4 must agree whether room cleanup requires an acknowledgement or additional status lookup.
+- Repeated delivery of the same result for a `gameId` must not repeat cleanup or create conflicting room state.
+- If notification or room cleanup fails, M1's finalized outcome remains unchanged and the same notification can be retried safely.
+- No player-facing match-history storage or XP persistence is required by this simplified contract.
 
-### Cancellation and Failed Starts
+## Cancellation and Failed Starts
 
 **Failed Game Start**
-- If M1 rejects the start request or cannot complete initialization, M4 receives a start-game error.
-- The room must not be left incorrectly locked as an active game.
-- No normal final-result payload or victory XP is produced.
-- Handling cleanup after partial initialization is an integration detail for M1 and M4.
+- If M1 rejects initialization, it returns a start-game error; no normal final-result notification is produced.
+- The room must not remain incorrectly marked as hosting a playable game.
+- M4 is expected to keep or restore its waiting-room state, subject to the agreed room status contract.
+- Partial-start cleanup is an M1/M4 integration detail.
 
 **Intentional Player Departure**
-- Choosing Leave Game permanently removes that player from active gameplay immediately.
-- If the Spy leaves, M1 finalizes the game as `TERMINATED`.
-- If an active Detective leaves and two or fewer active players remain, M1 finalizes the game as `TERMINATED`.
-- Otherwise, the game continues according to Section 2.7.
-- If the host leaves, the same gameplay rules apply; M4 handles room ownership and membership.
+- A Leave Game action causes immediate permanent game departure.
+- If the Spy intentionally leaves, M1 enters `TERMINATED` immediately.
+- If an active Detective leaves and two or fewer active players remain, M1 enters `TERMINATED` immediately.
+- Otherwise, gameplay continues according to Game Rules Section 2.7.
+- The host obeys the same gameplay rules; M4 manages room membership and host ownership.
+- M4 must notify M1 of an authenticated intentional departure. The proposed notification and its exact payload are not yet agreed.
 
 **Unexpected Disconnection**
-- Disconnection alone does not immediately cancel or terminate the game.
-- Reconnection is allowed before the current round's resolution begins.
-- At round resolution, M1 first processes normal voting and victory conditions.
-- If no winner exists, M1 processes players who remain disconnected and applies the no-winner termination rules.
+- Disconnection alone does not immediately terminate the game.
+- Reconnection is permitted before the current round's resolution begins.
+- At round resolution M1 resolves voting and any normal victory first; only if no winner exists does M1 process players who remain disconnected and apply termination rules.
 
 **Administrative Cancellation**
-- No additional host/admin Cancel Game operation has been approved.
-- If M4 requires administrative cancellation of an ongoing game, its authorization, reason, terminal outcome, and notification contract must be agreed before implementation.
-- No extra `CANCELLED` game state is introduced by this proposal.
+- No separate host/admin Cancel Game operation has been approved.
+- If M4 needs administrative cancellation, M1/M4 must agree on its authorization, terminal outcome, reason, and notification before implementation.
+- No new `CANCELLED` state is added by this contract.
 
-### Errors and Consistency
+## Errors and Consistency
 
-- Finalization request for an unknown game → reject.
-- Finalization before a valid terminal outcome exists → reject.
+- Finalization for an unknown game → reject.
+- Finalization without a valid terminal condition → reject.
 - Attempt to change an existing final outcome → reject.
-- Duplicate delivery of the same final result → handle idempotently; no additional XP.
-- XP amounts inconsistent with the authoritative winner → reject or flag as an integration error.
-- Invalid or incomplete result payload → reject and report the error.
-- An unsuccessful M4 persistence operation must not change M1's already-finalized outcome.
-- Exact error codes and the persistence acknowledgement mechanism remain integration decisions.
+- Duplicate delivery of the identical final result → handle idempotently (no duplicate cleanup).
+- Missing or inconsistent `gameId`, `roomId`, status, winner, or termination reason → reject or report an integration error.
+- Failed notification or cleanup must not undo M1's committed outcome.
+- Exact error codes and acknowledgement/retry behavior remain integration decisions.
 
-### Module Responsibilities
+## Module Responsibilities
 
-- **M1:** Determines final outcomes, termination reasons, participant results, XP awards, and finalization timing.
-- **M4:** Stores game history, applies XP exactly once, and updates room state.
-- **M3:** Displays permitted completion, termination, and result information.
-- **M2:** Provides authenticated player identities.
-- **M5:** Supports secure backend communication and deployment reliability.
+- **M1:** Final outcome, winner/termination reason, finalization timing, authoritative game state, and final notification.
+- **M4:** Room status, membership, host ownership, and safe end-of-game room cleanup.
+- **M3:** Player-facing completion and termination screens, with correct secret visibility.
+- **M2:** Authenticated player identities.
+- **M5:** Secure backend communication and deployment support.
 
-### Unconfirmed Integration Decisions
+## Unconfirmed Integration Decisions
 
 | ID | Decision | Proposed Default | Owner | Status |
 |---|---|---|---|---|
-| D5.1 | Final-result fields | Minimal payload above | M1 + M4 | Open |
-| D5.2 | Result delivery method | Direct NestJS service call | M1 + M4 | Open |
-| D5.3 | Result acknowledgement and retry | Same `gameId`, idempotent processing | M1 + M4 | Open |
-| D5.4 | Final history and XP persistence | M4 persists one result and awards XP once | M4 | Open |
-| D6.1 | Administrative cancellation required? | No additional cancellation operation | M1 + M4 | Open |
-| D7.1 | Host departure and room ownership | M1 applies player rules; M4 handles host transfer | M1 + M4 | Open |
-| D7.2 | Room cleanup after failure or termination | M4-owned room lifecycle | M4 | Open |
+| D5.1 | Final-result fields | Minimal six-field payload above | M1 + M4 | Open |
+| D5.2 | Result notification method | Internal `onGameFinalized(result)` service/callback | M1 + M4 | Open |
+| D5.3 | Acknowledgement and retry behavior | Retry the identical result using `gameId`; safe repeated processing | M1 + M4 | Open |
+| D5.4 | Room state after a game ends | One match per room; mark finished/closed and clean up safely | M4 + M1 | Open |
+| D6.1 | Administrative cancellation required? | No additional cancellation operation unless agreed | M1 + M4 | Open |
+| D7.1 | Host/player departure notification and membership behavior | M4 sends authenticated departure; M1 updates gameplay; M4 owns membership | M1 + M4 | Open |
+| D7.2 | When an empty room may be deleted | Only after terminal game result and safe database-reference handling | M4 + M1 | Open |
 
-**Due dates:** To be assigned or refreshed by M4. Pending decisions are not represented as confirmed agreements.
+**Due dates:** M4/team to confirm or update in the central Sprint 1 decision log before integration. The interface details above are proposals, not claims of approval.
