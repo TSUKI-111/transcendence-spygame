@@ -21,7 +21,7 @@ const navigate = useNavigate();
     if(pass1 !== pass2)
     {
       setError("nomatch");
-      return;
+      
     }
 
     setMail("");
