@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom";
+import type { SubmitEvent } from "react";
 
 
 
@@ -13,7 +14,7 @@ export default function RegisterPage() {
 
 const navigate = useNavigate();
 
- async function Handlesubmit(e){
+ async function Handlesubmit(e: SubmitEvent<HTMLFormElement>){
     e.preventDefault();
     console.log(username);
     console.log(email);
