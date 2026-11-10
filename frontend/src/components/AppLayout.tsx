@@ -9,11 +9,10 @@ export default function AppLayout() {
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
       <aside className="flex w-56 flex-col border-r border-slate-800 bg-slate-800 p-4">
-        <div className="mb-8 text-lg font-bold tracking-widest">TRANSCENDENCE</div>
+        <div className="mb-8 text-lg font-bold">TRANSCENDENCE</div>
         <nav className="flex flex-1 flex-col gap-1">
           {links.map((link) => (
-            <NavLink
-              key={link.to}
+            <NavLink key={link.to}
               to={link.to}
               end
               className={({ isActive }) =>
