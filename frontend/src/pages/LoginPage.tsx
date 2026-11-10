@@ -1,11 +1,13 @@
 import { useState }from "react"
 import { NavLink } from "react-router-dom";
+import type { SubmitEvent } from "react";
+
 export default function LoginPage() {
 
   const [mail, setMail] = useState("");
   const [password, setPass] = useState("");
 
-  function handleSubmit(e) {
+  function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     console.log("submitted");
     setMail("");

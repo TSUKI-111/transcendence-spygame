@@ -2,6 +2,7 @@ import img from "../assets/vite.svg"
 
 export default async function RoomsPage() {
 
+
   try{
 
     const response = await fetch("http://localhost:3000/rooms");
@@ -16,7 +17,7 @@ export default async function RoomsPage() {
         <div id="count-search"> 
 
         </div>
-          <div id="rooms-list" className="flex-col flex-1 gap-2 border space-between"> {mockRooms.map((Room) => (
+          <div id="rooms-list" className="flex-col flex-1 gap-2 border space-between"> {mockRooms.map((Room: any) => (
             <div id="room" className="border flex gap-16 m-3" >
               <img src={img} className="flex border" />
               <div className="flex justify-start border flex-col p-3 m-3"> 

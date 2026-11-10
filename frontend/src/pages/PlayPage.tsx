@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { mockRooms } from "../mocks/rooms";
 
 
 export default function RoomsPage() {
