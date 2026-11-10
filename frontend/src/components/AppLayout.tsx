@@ -2,7 +2,8 @@ import { NavLink, Outlet } from "react-router-dom";
 
 const links = [
   { to: "/", label: "Home" },
-  { to: "/rooms", label: "Play" },
+  { to: "/play", label: "Play" },
+  { to: "/rooms", label: "Rooms" },
 ];
 
 export default function AppLayout() {

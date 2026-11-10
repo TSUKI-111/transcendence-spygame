@@ -1,43 +1,51 @@
-import { useState } from "react";
-import { mockRooms } from "../mocks/rooms";
+import img from "../assets/vite.svg"
 
+export default async function RoomsPage() {
 
-export default function RoomsPage() {
+  try{
 
-  let max = 8;
-  const [players, setPlayers] = useState("0");
-  return (
-    <main className="flex flex-col flex-1 p-8 gap-4">
+    const response = await fetch("http://localhost:3000/rooms");
+    if(!response.ok)
+      throw new Error("error fetching") 
+    
+    const mockRooms = await response.json();
+   return (
+    <main>
+      <div id="rooms">
 
-      <h1 className="flex justify-center text-3xl font-bold">Create or Join a room</h1>
+        <div id="count-search"> 
 
-      <div className="flex flex-1 items-center gap-36 p-16 m-16 justify-center h-full">
-        <form className="flex flex-col p-2 border ">
-            <h1 className="text-xl flex justify-center">create room</h1>
-            <h2 className="flex justify-center text-sm"> share the code with your friends</h2>
-
-            <div className="flex m-2">
-              <input type="text" className=" flex m-2 border"></input>
-              <select value={players} onChange={(e) => setPlayers(e.target.value)} className="flex m-2 border">
-              {Array.from({ length : max}, (_,i) =>(
-                <option className="bg-slate-800" key={i + 1} value={i + 1} >
-                {i + 1}
-                </option>
-              ))}
-
-              </select>
+        </div>
+          <div id="rooms-list" className="flex-col flex-1 gap-2 border space-between"> {mockRooms.map((Room) => (
+            <div id="room" className="border flex gap-16 m-3" >
+              <img src={img} className="flex border" />
+              <div className="flex justify-start border flex-col p-3 m-3"> 
+                <h2>{Room.name}</h2>
+                <p>{Room.host}</p>
+              </div>
+              <div className="flex gap-16 justify-end ">
+                <div className="flex  border justify-center items-center"> 
+                  <p> {Room.players} / {Room.maxPlayers}</p>
+                  <img />
+                  <p>{ Room.maxPlayers - Room.players} places left </p>
+                </div>
+                <button type="button" className="flex  border"> Join Room</button>
+              </div>
 
             </div>
-            <button type="submit" className="flex border border-slate-800 justify-center"> click here </button>
-        </form>
-        <form className="flex flex-col p-2 border ">
-          <h1 className="text-xl flex justify-center">Join room</h1>
-          <h2 className="flex justify-center text-sm"> enter the code to join a room</h2>
-          <input type="text" className="border m-2"></input>
-          <button className="flex m-2 border border-slate-800"> Join room</button>
-        </form>
-      </div>
+          ))} 
+            
+          </div>
+        </div>
+  
 
     </main>
   );
+    
+    }
+    
+  catch{
+    console.error("could not fetch");
+  }
+ 
 }

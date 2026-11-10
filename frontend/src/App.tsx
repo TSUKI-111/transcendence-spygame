@@ -7,6 +7,7 @@ import HomePage from "./pages/HomePage";
 import RoomsPage from "./pages/RoomsPage";
 import LobbyPage from "./pages/LobbyPage";
 import GamePage from "./pages/GamePage";
+import PlayPage from "./pages/PlayPage";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
       </Route>
       <Route element={<AppLayout />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/play" element={<PlayPage />} />
         <Route path="/rooms" element={<RoomsPage />} />
       </Route>
       <Route path="/lobby/:roomId" element={<LobbyPage />} />

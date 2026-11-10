@@ -4,6 +4,7 @@ export type Room = {
   maxPlayers: number;
   status: "waiting" | "playing";
   players: number;
+  host: string;
 };
 
 export const mockRooms: Room[] = [
@@ -12,20 +13,23 @@ export const mockRooms: Room[] = [
     name: "Rookie Arena",
     maxPlayers: 4,
     status: "waiting",
-    players: 4
+    players: 4,
+    host: "alex"
   },
   {
     id: 2,
     name: "Champions League",
     maxPlayers: 4,
     status: "playing",
-    players: 4
+    players: 4,
+    host: "jhon"
   },
   {
     id: 3,
     name: "Training Room",
     maxPlayers: 2,
     status: "waiting",
-    players: 1
+    players: 1,
+    host: "mary"
   }
 ];
