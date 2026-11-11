@@ -1,6 +1,6 @@
 # M1 — Final-Result, Completion and Cancellation Contract
 
-**Sprint 1 — Task 3: Game Engine & Rooms Integration**  
+**Sprint 1 — Task 3: Game Engine & Rooms Integration**
 **Status:** Updated for the team-approved simplified scope — exact M1/M4 integration interface awaiting confirmation.
 
 ## Purpose
