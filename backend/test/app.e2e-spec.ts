@@ -16,11 +16,17 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  it('GET /health should return application health', async () => {
+    await request(app.getHttpServer()).get('/health').expect(200).expect({
+      status: 'ok',
+    });
+  });
+
+  it('GET /ready should return database readiness', async () => {
+    await request(app.getHttpServer()).get('/ready').expect(200).expect({
+      status: 'ready',
+      database: 'connected',
+    });
   });
 
   afterEach(async () => {
