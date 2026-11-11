@@ -1,19 +1,17 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Allow frontend communication
   app.enableCors({
     origin: 'http://localhost:5173',
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // Global validation
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -22,7 +20,6 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('Spy Game API')
     .setDescription('API documentation for Spy Game')

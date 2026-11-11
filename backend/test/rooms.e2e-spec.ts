@@ -8,6 +8,7 @@ import { RoomsController } from '../src/rooms/rooms.controller.js';
 import { RoomsService } from '../src/rooms/rooms.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { RequireUserGuard } from '../src/auth/guards/require-user.guard.js';
+import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
 
 describe('RoomsController (e2e)', () => {
   let app: INestApplication<App>;
@@ -57,6 +58,14 @@ describe('RoomsController (e2e)', () => {
           provide: PrismaService,
           useValue: prismaMock,
         },
+        {
+          provide: RoomEventsPublisher,
+          useValue: {
+            publishPlayerJoined: vi.fn(),
+            publishPlayerLeft: vi.fn(),
+            publishHostChanged: vi.fn(),
+          },
+        },
       ],
     })
       .overrideGuard(RequireUserGuard)
@@ -89,7 +98,9 @@ describe('RoomsController (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('S1: creates a public room without returning an invitation code', async () => {
