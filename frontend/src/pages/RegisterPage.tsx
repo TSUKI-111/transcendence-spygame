@@ -22,32 +22,32 @@ const navigate = useNavigate();
     if(pass1 !== pass2)
     {
       setError("nomatch");
-      
+
     }
 
     setMail("");
-    
+
     navigate("/")
     // try {
 
     //   const response = await fetch("http://localhost:3000/auth/login", {
-        
+
     //     method: "POST",
     //     headers: { "Content-type": "application/json "},
     //     body: JSON.stringify({username, email, pass1, pass2}),
     //   });
-      
+
     //   if(!response.ok)
     //     {
     //       throw new Error("failed to authenitcate")
     //     }
-      
+
     //   }
     //   catch(error)
     //   {
     //     console.log(error)
     //   }
-    
+
   }
 
   return (

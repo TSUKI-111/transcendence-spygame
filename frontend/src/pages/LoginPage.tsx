@@ -12,7 +12,7 @@ export default function LoginPage() {
     console.log("submitted");
     setMail("");
     setPass("");
-    
+
   }
   return (
 
