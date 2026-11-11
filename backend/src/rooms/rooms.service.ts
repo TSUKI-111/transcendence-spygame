@@ -247,7 +247,7 @@ export class RoomsService {
       });
       if (updateRoom) {
         const joinedPlayer = updateRoom.players.find(
-          ({ user }) => (user.id = userId),
+          ({ user }) => user.id === userId,
         );
         if (joinedPlayer) {
           this.roomEventPublisher.publishPlayerJoined({

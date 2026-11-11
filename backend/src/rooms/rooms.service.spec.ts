@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { RoomEventsPublisher } from './events/room-events.publisher.js';
+import type { RoomEvent } from './events/room-events.types.js';
 
 describe('RoomsService', () => {
   let roomsService: RoomsService;
@@ -1203,8 +1204,22 @@ describe('RoomsService', () => {
     it('should allow a normal player to leave a room', async () => {
       roomPlayerCountMock.mockResolvedValue(2);
 
+      const publishLeftSpy = vi.spyOn(roomEventsPublisher, 'publishPlayerLeft');
+      const publishHostChangedSpy = vi.spyOn(
+        roomEventsPublisher,
+        'publishHostChanged',
+      );
+
       const result = await roomsService.leaveRoom(roomId, playerId);
 
+      expect(publishLeftSpy).toHaveBeenCalledTimes(1);
+
+      expect(publishLeftSpy).toHaveBeenCalledWith({
+        roomId,
+        playerId,
+      });
+
+      expect(publishHostChangedSpy).not.toHaveBeenCalled();
       expect(result).toEqual({
         roomDeleted: false,
         room: updatedRoom,
@@ -1224,6 +1239,11 @@ describe('RoomsService', () => {
     });
 
     it('should transfer host ownership to the oldest remaining player', async () => {
+      const emittedEvents: RoomEvent[] = [];
+
+      const subscription = roomEventsPublisher.events$.subscribe((event) =>
+        emittedEvents.push(event),
+      );
       const nextHostId = 30;
 
       roomFindUniqueMock
@@ -1244,7 +1264,21 @@ describe('RoomsService', () => {
       });
 
       const result = await roomsService.leaveRoom(roomId, playerId);
-
+      expect(emittedEvents).toEqual([
+        {
+          event: 'room.player_left',
+          payload: { roomId, playerId },
+        },
+        {
+          event: 'room.host_changed',
+          payload: {
+            roomId,
+            previousHostId: playerId,
+            newHostId: nextHostId,
+          },
+        },
+      ]);
+      subscription.unsubscribe();
       expect(result.roomDeleted).toBe(false);
 
       expect(roomPlayerFindFirstMock).toHaveBeenCalledWith({
@@ -1261,9 +1295,21 @@ describe('RoomsService', () => {
 
     it('should delete the room when the last player leaves', async () => {
       roomPlayerCountMock.mockResolvedValue(0);
+      const publishLeftSpy = vi.spyOn(roomEventsPublisher, 'publishPlayerLeft');
+      const publishHostChangedSpy = vi.spyOn(
+        roomEventsPublisher,
+        'publishHostChanged',
+      );
 
       const result = await roomsService.leaveRoom(roomId, playerId);
+      expect(publishLeftSpy).toHaveBeenCalledWith({
+        roomId,
+        playerId,
+      });
 
+      expect(publishLeftSpy).toHaveBeenCalledTimes(1);
+
+      expect(publishHostChangedSpy).not.toHaveBeenCalled();
       expect(result).toEqual({
         roomDeleted: true,
       });
