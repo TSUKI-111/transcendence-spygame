@@ -29,6 +29,7 @@ model User {
   hostedRooms  Room[]   @relation("RoomHost")
   roomPlayers RoomPlayer[]
   sessions Session[]
+  gamePlayers GamePlayer[]
 
   @@map("users")
 }
@@ -61,6 +62,7 @@ model Room {
   players RoomPlayer[]
 
   @@map("rooms")
+  game Game?
 }
 
 model RoomPlayer {
@@ -75,9 +77,135 @@ model RoomPlayer {
   @@map("room_players")
 }
 
+model Game{
+  id                      String      @id @db.Uuid
+  roomId                  String      @unique @db.Uuid
+  phase                   GamePhase
+  currentRoundNumber      Int
+  secretWord              String
+  phaseEndsAt             DateTime?
+  winner                  GameWinner?
+  terminationReason       TerminationReason?
+  startedAt               DateTime
+  endedAt                 DateTime?
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  players GamePlayer[]
+  rounds GameRound[]
+
+  @@map("games")
+}
+
+model GamePlayer {
+  id                  Int                 @id @default(autoincrement())
+  gameId              String              @db.Uuid
+  userId              Int
+  role                GameRole
+  participationStatus ParticipationStatus
+  connectionStatus    ConnectionStatus
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  votesCast     Vote[] @relation("VoteVoter")
+  votesReceived Vote[] @relation("VoteTarget")
+  eliminatedInRounds GameRound[]
+  clues Clue[]
+
+  @@unique([gameId, userId])
+  @@map("game_players")
+}
+
+model GameRound {
+  id                     Int           @id @default(autoincrement())
+  gameId                 String        @db.Uuid
+  number                 Int
+  outcome                RoundOutcome?
+  eliminatedGamePlayerId Int?
+  resolvedAt             DateTime?
+
+  game                 Game        @relation(fields: [gameId], references: [id], onDelete: Restrict)
+  eliminatedGamePlayer GamePlayer? @relation(fields: [eliminatedGamePlayerId], references: [id], onDelete: Restrict)
+  clues Clue[]
+  votes Vote[]
+
+  @@unique([gameId, number])
+  @@map("game_rounds")
+}
+
+model Clue {
+  id                 Int      @id @default(autoincrement())
+  roundId            Int
+  authorGamePlayerId Int
+  text               String   @db.VarChar(100)
+  normalizedText     String   @db.VarChar(100)
+  submittedAt        DateTime
+
+  round  GameRound  @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  author GamePlayer @relation(fields: [authorGamePlayerId], references: [id], onDelete: Restrict)
+
+  @@unique([roundId, authorGamePlayerId])
+  @@unique([roundId, normalizedText])
+  @@map("clues")
+}
+
+model Vote {
+  id                 Int      @id @default(autoincrement())
+  roundId            Int
+  voterGamePlayerId  Int
+  targetGamePlayerId Int
+  submittedAt        DateTime
+
+  round  GameRound  @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  voter  GamePlayer @relation("VoteVoter", fields: [voterGamePlayerId], references: [id], onDelete: Restrict)
+  target GamePlayer @relation("VoteTarget", fields: [targetGamePlayerId], references: [id], onDelete: Restrict)
+
+  @@unique([roundId, voterGamePlayerId])
+  @@map("votes")
+}
+
 enum RoomStatus {
   WAITING
   IN_GAME
   FINISHED
   CLOSED
+}
+
+enum GamePhase {
+  ROLE_ASSIGNMENT
+  CLUE_SUBMISSION
+  DISCUSSION
+  VOTING
+  FINISHED
+  TERMINATED
+}
+
+enum GameWinner {
+  SPY
+  DETECTIVES
+}
+
+enum TerminationReason {
+  SPY_DEPARTED
+  INSUFFICIENT_PLAYERS
+}
+
+enum GameRole {
+  SPY
+  DETECTIVE
+}
+
+enum ParticipationStatus {
+  ACTIVE
+  ELIMINATED
+  DEPARTED
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+}
+enum RoundOutcome {
+  ELIMINATED
+  TIE
+  NO_VOTES
 }
