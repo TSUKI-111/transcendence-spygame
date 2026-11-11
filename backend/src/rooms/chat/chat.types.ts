@@ -17,6 +17,5 @@ export interface ChatMessagePayload {
   displayName: string;
   channel: ChatChannel;
   content: string;
-  createdAt Date;
+  createdAt: Date;
 }
-
