@@ -29,6 +29,7 @@ model User {
   hostedRooms  Room[]   @relation("RoomHost")
   roomPlayers RoomPlayer[]
   sessions Session[]
+  chatMessages ChatMessage[]
   gamePlayers GamePlayer[]
 
   @@map("users")
@@ -60,6 +61,7 @@ model Room {
 
   host       User     @relation("RoomHost", fields: [hostId], references: [id])
   players RoomPlayer[]
+  chatMessages ChatMessage[]
 
   @@map("rooms")
   game Game?
@@ -163,6 +165,23 @@ model Vote {
   @@map("votes")
 }
 
+model ChatMessage {
+  id        Int         @id @default(autoincrement())
+  roomId    String      @db.Uuid
+  userId    Int
+  channel   ChatChannel
+  content   String      @db.VarChar(300)
+  createdAt DateTime    @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([roomId, channel, createdAt])
+  @@index([userId])
+  @@map("chat_messages")
+}
+
+
 enum RoomStatus {
   WAITING
   IN_GAME
@@ -208,4 +227,9 @@ enum RoundOutcome {
   ELIMINATED
   TIE
   NO_VOTES
+}
+
+enum ChatChannel {
+  LOBBY
+  DISCUSSION
 }
