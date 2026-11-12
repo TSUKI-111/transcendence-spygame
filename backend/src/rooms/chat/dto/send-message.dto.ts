@@ -1,19 +1,8 @@
-import {
-  IsEnum,
-  IsNotEmpty,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
-
-import { ChatChannel } from '../chat.types.js';
+import { IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class SendMessageDto {
   @IsUUID()
   roomId: string;
-
-  @IsEnum(ChatChannel)
-  channel: ChatChannel;
 
   @IsNotEmpty()
   @IsString()
