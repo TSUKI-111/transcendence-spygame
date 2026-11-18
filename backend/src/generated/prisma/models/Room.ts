@@ -246,6 +246,8 @@ export type RoomWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"Room"> | Date | string
   host?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
   players?: Prisma.RoomPlayerListRelationFilter
+  chatMessages?: Prisma.ChatMessageListRelationFilter
+  game?: Prisma.XOR<Prisma.GameNullableScalarRelationFilter, Prisma.GameWhereInput> | null
 }
 
 export type RoomOrderByWithRelationInput = {
@@ -259,6 +261,8 @@ export type RoomOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   host?: Prisma.UserOrderByWithRelationInput
   players?: Prisma.RoomPlayerOrderByRelationAggregateInput
+  chatMessages?: Prisma.ChatMessageOrderByRelationAggregateInput
+  game?: Prisma.GameOrderByWithRelationInput
 }
 
 export type RoomWhereUniqueInput = Prisma.AtLeast<{
@@ -275,6 +279,8 @@ export type RoomWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"Room"> | Date | string
   host?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
   players?: Prisma.RoomPlayerListRelationFilter
+  chatMessages?: Prisma.ChatMessageListRelationFilter
+  game?: Prisma.XOR<Prisma.GameNullableScalarRelationFilter, Prisma.GameWhereInput> | null
 }, "id" | "inviteCode">
 
 export type RoomOrderByWithAggregationInput = {
@@ -317,6 +323,8 @@ export type RoomCreateInput = {
   createdAt?: Date | string
   host: Prisma.UserCreateNestedOneWithoutHostedRoomsInput
   players?: Prisma.RoomPlayerCreateNestedManyWithoutRoomInput
+  chatMessages?: Prisma.ChatMessageCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameCreateNestedOneWithoutRoomInput
 }
 
 export type RoomUncheckedCreateInput = {
@@ -329,6 +337,8 @@ export type RoomUncheckedCreateInput = {
   inviteCode?: string | null
   createdAt?: Date | string
   players?: Prisma.RoomPlayerUncheckedCreateNestedManyWithoutRoomInput
+  chatMessages?: Prisma.ChatMessageUncheckedCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameUncheckedCreateNestedOneWithoutRoomInput
 }
 
 export type RoomUpdateInput = {
@@ -341,6 +351,8 @@ export type RoomUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   host?: Prisma.UserUpdateOneRequiredWithoutHostedRoomsNestedInput
   players?: Prisma.RoomPlayerUpdateManyWithoutRoomNestedInput
+  chatMessages?: Prisma.ChatMessageUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUpdateOneWithoutRoomNestedInput
 }
 
 export type RoomUncheckedUpdateInput = {
@@ -353,6 +365,8 @@ export type RoomUncheckedUpdateInput = {
   inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   players?: Prisma.RoomPlayerUncheckedUpdateManyWithoutRoomNestedInput
+  chatMessages?: Prisma.ChatMessageUncheckedUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUncheckedUpdateOneWithoutRoomNestedInput
 }
 
 export type RoomCreateManyInput = {
@@ -513,6 +527,34 @@ export type RoomUpdateOneRequiredWithoutPlayersNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.RoomUpdateToOneWithWhereWithoutPlayersInput, Prisma.RoomUpdateWithoutPlayersInput>, Prisma.RoomUncheckedUpdateWithoutPlayersInput>
 }
 
+export type RoomCreateNestedOneWithoutGameInput = {
+  create?: Prisma.XOR<Prisma.RoomCreateWithoutGameInput, Prisma.RoomUncheckedCreateWithoutGameInput>
+  connectOrCreate?: Prisma.RoomCreateOrConnectWithoutGameInput
+  connect?: Prisma.RoomWhereUniqueInput
+}
+
+export type RoomUpdateOneRequiredWithoutGameNestedInput = {
+  create?: Prisma.XOR<Prisma.RoomCreateWithoutGameInput, Prisma.RoomUncheckedCreateWithoutGameInput>
+  connectOrCreate?: Prisma.RoomCreateOrConnectWithoutGameInput
+  upsert?: Prisma.RoomUpsertWithoutGameInput
+  connect?: Prisma.RoomWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.RoomUpdateToOneWithWhereWithoutGameInput, Prisma.RoomUpdateWithoutGameInput>, Prisma.RoomUncheckedUpdateWithoutGameInput>
+}
+
+export type RoomCreateNestedOneWithoutChatMessagesInput = {
+  create?: Prisma.XOR<Prisma.RoomCreateWithoutChatMessagesInput, Prisma.RoomUncheckedCreateWithoutChatMessagesInput>
+  connectOrCreate?: Prisma.RoomCreateOrConnectWithoutChatMessagesInput
+  connect?: Prisma.RoomWhereUniqueInput
+}
+
+export type RoomUpdateOneRequiredWithoutChatMessagesNestedInput = {
+  create?: Prisma.XOR<Prisma.RoomCreateWithoutChatMessagesInput, Prisma.RoomUncheckedCreateWithoutChatMessagesInput>
+  connectOrCreate?: Prisma.RoomCreateOrConnectWithoutChatMessagesInput
+  upsert?: Prisma.RoomUpsertWithoutChatMessagesInput
+  connect?: Prisma.RoomWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.RoomUpdateToOneWithWhereWithoutChatMessagesInput, Prisma.RoomUpdateWithoutChatMessagesInput>, Prisma.RoomUncheckedUpdateWithoutChatMessagesInput>
+}
+
 export type RoomCreateWithoutHostInput = {
   id?: string
   name: string
@@ -522,6 +564,8 @@ export type RoomCreateWithoutHostInput = {
   inviteCode?: string | null
   createdAt?: Date | string
   players?: Prisma.RoomPlayerCreateNestedManyWithoutRoomInput
+  chatMessages?: Prisma.ChatMessageCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameCreateNestedOneWithoutRoomInput
 }
 
 export type RoomUncheckedCreateWithoutHostInput = {
@@ -533,6 +577,8 @@ export type RoomUncheckedCreateWithoutHostInput = {
   inviteCode?: string | null
   createdAt?: Date | string
   players?: Prisma.RoomPlayerUncheckedCreateNestedManyWithoutRoomInput
+  chatMessages?: Prisma.ChatMessageUncheckedCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameUncheckedCreateNestedOneWithoutRoomInput
 }
 
 export type RoomCreateOrConnectWithoutHostInput = {
@@ -584,6 +630,8 @@ export type RoomCreateWithoutPlayersInput = {
   inviteCode?: string | null
   createdAt?: Date | string
   host: Prisma.UserCreateNestedOneWithoutHostedRoomsInput
+  chatMessages?: Prisma.ChatMessageCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameCreateNestedOneWithoutRoomInput
 }
 
 export type RoomUncheckedCreateWithoutPlayersInput = {
@@ -595,6 +643,8 @@ export type RoomUncheckedCreateWithoutPlayersInput = {
   isPrivate: boolean
   inviteCode?: string | null
   createdAt?: Date | string
+  chatMessages?: Prisma.ChatMessageUncheckedCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameUncheckedCreateNestedOneWithoutRoomInput
 }
 
 export type RoomCreateOrConnectWithoutPlayersInput = {
@@ -622,6 +672,8 @@ export type RoomUpdateWithoutPlayersInput = {
   inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   host?: Prisma.UserUpdateOneRequiredWithoutHostedRoomsNestedInput
+  chatMessages?: Prisma.ChatMessageUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUpdateOneWithoutRoomNestedInput
 }
 
 export type RoomUncheckedUpdateWithoutPlayersInput = {
@@ -633,6 +685,144 @@ export type RoomUncheckedUpdateWithoutPlayersInput = {
   isPrivate?: Prisma.BoolFieldUpdateOperationsInput | boolean
   inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  chatMessages?: Prisma.ChatMessageUncheckedUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUncheckedUpdateOneWithoutRoomNestedInput
+}
+
+export type RoomCreateWithoutGameInput = {
+  id?: string
+  name: string
+  maxPlayers: number
+  status?: $Enums.RoomStatus
+  isPrivate: boolean
+  inviteCode?: string | null
+  createdAt?: Date | string
+  host: Prisma.UserCreateNestedOneWithoutHostedRoomsInput
+  players?: Prisma.RoomPlayerCreateNestedManyWithoutRoomInput
+  chatMessages?: Prisma.ChatMessageCreateNestedManyWithoutRoomInput
+}
+
+export type RoomUncheckedCreateWithoutGameInput = {
+  id?: string
+  name: string
+  hostId: number
+  maxPlayers: number
+  status?: $Enums.RoomStatus
+  isPrivate: boolean
+  inviteCode?: string | null
+  createdAt?: Date | string
+  players?: Prisma.RoomPlayerUncheckedCreateNestedManyWithoutRoomInput
+  chatMessages?: Prisma.ChatMessageUncheckedCreateNestedManyWithoutRoomInput
+}
+
+export type RoomCreateOrConnectWithoutGameInput = {
+  where: Prisma.RoomWhereUniqueInput
+  create: Prisma.XOR<Prisma.RoomCreateWithoutGameInput, Prisma.RoomUncheckedCreateWithoutGameInput>
+}
+
+export type RoomUpsertWithoutGameInput = {
+  update: Prisma.XOR<Prisma.RoomUpdateWithoutGameInput, Prisma.RoomUncheckedUpdateWithoutGameInput>
+  create: Prisma.XOR<Prisma.RoomCreateWithoutGameInput, Prisma.RoomUncheckedCreateWithoutGameInput>
+  where?: Prisma.RoomWhereInput
+}
+
+export type RoomUpdateToOneWithWhereWithoutGameInput = {
+  where?: Prisma.RoomWhereInput
+  data: Prisma.XOR<Prisma.RoomUpdateWithoutGameInput, Prisma.RoomUncheckedUpdateWithoutGameInput>
+}
+
+export type RoomUpdateWithoutGameInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  maxPlayers?: Prisma.IntFieldUpdateOperationsInput | number
+  status?: Prisma.EnumRoomStatusFieldUpdateOperationsInput | $Enums.RoomStatus
+  isPrivate?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  host?: Prisma.UserUpdateOneRequiredWithoutHostedRoomsNestedInput
+  players?: Prisma.RoomPlayerUpdateManyWithoutRoomNestedInput
+  chatMessages?: Prisma.ChatMessageUpdateManyWithoutRoomNestedInput
+}
+
+export type RoomUncheckedUpdateWithoutGameInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  hostId?: Prisma.IntFieldUpdateOperationsInput | number
+  maxPlayers?: Prisma.IntFieldUpdateOperationsInput | number
+  status?: Prisma.EnumRoomStatusFieldUpdateOperationsInput | $Enums.RoomStatus
+  isPrivate?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  players?: Prisma.RoomPlayerUncheckedUpdateManyWithoutRoomNestedInput
+  chatMessages?: Prisma.ChatMessageUncheckedUpdateManyWithoutRoomNestedInput
+}
+
+export type RoomCreateWithoutChatMessagesInput = {
+  id?: string
+  name: string
+  maxPlayers: number
+  status?: $Enums.RoomStatus
+  isPrivate: boolean
+  inviteCode?: string | null
+  createdAt?: Date | string
+  host: Prisma.UserCreateNestedOneWithoutHostedRoomsInput
+  players?: Prisma.RoomPlayerCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameCreateNestedOneWithoutRoomInput
+}
+
+export type RoomUncheckedCreateWithoutChatMessagesInput = {
+  id?: string
+  name: string
+  hostId: number
+  maxPlayers: number
+  status?: $Enums.RoomStatus
+  isPrivate: boolean
+  inviteCode?: string | null
+  createdAt?: Date | string
+  players?: Prisma.RoomPlayerUncheckedCreateNestedManyWithoutRoomInput
+  game?: Prisma.GameUncheckedCreateNestedOneWithoutRoomInput
+}
+
+export type RoomCreateOrConnectWithoutChatMessagesInput = {
+  where: Prisma.RoomWhereUniqueInput
+  create: Prisma.XOR<Prisma.RoomCreateWithoutChatMessagesInput, Prisma.RoomUncheckedCreateWithoutChatMessagesInput>
+}
+
+export type RoomUpsertWithoutChatMessagesInput = {
+  update: Prisma.XOR<Prisma.RoomUpdateWithoutChatMessagesInput, Prisma.RoomUncheckedUpdateWithoutChatMessagesInput>
+  create: Prisma.XOR<Prisma.RoomCreateWithoutChatMessagesInput, Prisma.RoomUncheckedCreateWithoutChatMessagesInput>
+  where?: Prisma.RoomWhereInput
+}
+
+export type RoomUpdateToOneWithWhereWithoutChatMessagesInput = {
+  where?: Prisma.RoomWhereInput
+  data: Prisma.XOR<Prisma.RoomUpdateWithoutChatMessagesInput, Prisma.RoomUncheckedUpdateWithoutChatMessagesInput>
+}
+
+export type RoomUpdateWithoutChatMessagesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  maxPlayers?: Prisma.IntFieldUpdateOperationsInput | number
+  status?: Prisma.EnumRoomStatusFieldUpdateOperationsInput | $Enums.RoomStatus
+  isPrivate?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  host?: Prisma.UserUpdateOneRequiredWithoutHostedRoomsNestedInput
+  players?: Prisma.RoomPlayerUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUpdateOneWithoutRoomNestedInput
+}
+
+export type RoomUncheckedUpdateWithoutChatMessagesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  hostId?: Prisma.IntFieldUpdateOperationsInput | number
+  maxPlayers?: Prisma.IntFieldUpdateOperationsInput | number
+  status?: Prisma.EnumRoomStatusFieldUpdateOperationsInput | $Enums.RoomStatus
+  isPrivate?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  players?: Prisma.RoomPlayerUncheckedUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUncheckedUpdateOneWithoutRoomNestedInput
 }
 
 export type RoomCreateManyHostInput = {
@@ -654,6 +844,8 @@ export type RoomUpdateWithoutHostInput = {
   inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   players?: Prisma.RoomPlayerUpdateManyWithoutRoomNestedInput
+  chatMessages?: Prisma.ChatMessageUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUpdateOneWithoutRoomNestedInput
 }
 
 export type RoomUncheckedUpdateWithoutHostInput = {
@@ -665,6 +857,8 @@ export type RoomUncheckedUpdateWithoutHostInput = {
   inviteCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   players?: Prisma.RoomPlayerUncheckedUpdateManyWithoutRoomNestedInput
+  chatMessages?: Prisma.ChatMessageUncheckedUpdateManyWithoutRoomNestedInput
+  game?: Prisma.GameUncheckedUpdateOneWithoutRoomNestedInput
 }
 
 export type RoomUncheckedUpdateManyWithoutHostInput = {
@@ -684,10 +878,12 @@ export type RoomUncheckedUpdateManyWithoutHostInput = {
 
 export type RoomCountOutputType = {
   players: number
+  chatMessages: number
 }
 
 export type RoomCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   players?: boolean | RoomCountOutputTypeCountPlayersArgs
+  chatMessages?: boolean | RoomCountOutputTypeCountChatMessagesArgs
 }
 
 /**
@@ -707,6 +903,13 @@ export type RoomCountOutputTypeCountPlayersArgs<ExtArgs extends runtime.Types.Ex
   where?: Prisma.RoomPlayerWhereInput
 }
 
+/**
+ * RoomCountOutputType without action
+ */
+export type RoomCountOutputTypeCountChatMessagesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ChatMessageWhereInput
+}
+
 
 export type RoomSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -719,6 +922,8 @@ export type RoomSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   createdAt?: boolean
   host?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   players?: boolean | Prisma.Room$playersArgs<ExtArgs>
+  chatMessages?: boolean | Prisma.Room$chatMessagesArgs<ExtArgs>
+  game?: boolean | Prisma.Room$gameArgs<ExtArgs>
   _count?: boolean | Prisma.RoomCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["room"]>
 
@@ -761,6 +966,8 @@ export type RoomOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = run
 export type RoomInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   host?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   players?: boolean | Prisma.Room$playersArgs<ExtArgs>
+  chatMessages?: boolean | Prisma.Room$chatMessagesArgs<ExtArgs>
+  game?: boolean | Prisma.Room$gameArgs<ExtArgs>
   _count?: boolean | Prisma.RoomCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type RoomIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -775,6 +982,8 @@ export type $RoomPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   objects: {
     host: Prisma.$UserPayload<ExtArgs>
     players: Prisma.$RoomPlayerPayload<ExtArgs>[]
+    chatMessages: Prisma.$ChatMessagePayload<ExtArgs>[]
+    game: Prisma.$GamePayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1181,6 +1390,8 @@ export interface Prisma__RoomClient<T, Null = never, ExtArgs extends runtime.Typ
   readonly [Symbol.toStringTag]: "PrismaPromise"
   host<T extends Prisma.UserDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.UserDefaultArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   players<T extends Prisma.Room$playersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Room$playersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RoomPlayerPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  chatMessages<T extends Prisma.Room$chatMessagesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Room$chatMessagesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ChatMessagePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  game<T extends Prisma.Room$gameArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Room$gameArgs<ExtArgs>>): Prisma.Prisma__GameClient<runtime.Types.Result.GetResult<Prisma.$GamePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1640,6 +1851,49 @@ export type Room$playersArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
   take?: number
   skip?: number
   distinct?: Prisma.RoomPlayerScalarFieldEnum | Prisma.RoomPlayerScalarFieldEnum[]
+}
+
+/**
+ * Room.chatMessages
+ */
+export type Room$chatMessagesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ChatMessage
+   */
+  select?: Prisma.ChatMessageSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the ChatMessage
+   */
+  omit?: Prisma.ChatMessageOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ChatMessageInclude<ExtArgs> | null
+  where?: Prisma.ChatMessageWhereInput
+  orderBy?: Prisma.ChatMessageOrderByWithRelationInput | Prisma.ChatMessageOrderByWithRelationInput[]
+  cursor?: Prisma.ChatMessageWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ChatMessageScalarFieldEnum | Prisma.ChatMessageScalarFieldEnum[]
+}
+
+/**
+ * Room.game
+ */
+export type Room$gameArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Game
+   */
+  select?: Prisma.GameSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Game
+   */
+  omit?: Prisma.GameOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.GameInclude<ExtArgs> | null
+  where?: Prisma.GameWhereInput
 }
 
 /**

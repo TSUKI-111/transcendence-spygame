@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RoomGateway } from './room.gateway.js';
 import { RoomEventsPublisher } from './events/room-events.publisher.js';
 import type { Server } from 'socket.io';
+import { RoomsService } from './rooms.service.js';
 
 describe('RoomGateway', () => {
   let gateway: RoomGateway;
@@ -10,6 +11,7 @@ describe('RoomGateway', () => {
     to: ReturnType<typeof vi.fn>;
     emit: ReturnType<typeof vi.fn>;
   };
+  let roomsService: RoomsService;
 
   beforeEach(() => {
     publisher = new RoomEventsPublisher();
@@ -18,8 +20,10 @@ describe('RoomGateway', () => {
       to: vi.fn().mockReturnThis(),
       emit: vi.fn(),
     };
-
-    gateway = new RoomGateway(publisher);
+    roomsService = {
+      verifyPlayerMembership: vi.fn(),
+    } as unknown as RoomsService;
+    gateway = new RoomGateway(publisher, roomsService);
     gateway.afterInit(mockServer as unknown as Server);
   });
 

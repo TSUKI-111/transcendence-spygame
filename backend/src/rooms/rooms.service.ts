@@ -720,4 +720,19 @@ export class RoomsService {
       throw error;
     }
   }
+
+  async verifyPlayerMembership(roomId: string, userId: number): Promise<void> {
+    const membership = await this.prisma.roomPlayer.findUnique({
+      where: {
+        roomId_userId: {
+          roomId,
+          userId,
+        },
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('You are not a member of this room');
+    }
+  }
 }
