@@ -17,13 +17,14 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
       </Route>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<HomePage />} />
+        
         <Route path="/play" element={<PlayPage />} />
         <Route path="/rooms" element={<RoomsPage />} />
         <Route path="/lobby/:roomId" element={<LobbyPage />} />
+        <Route path="/game/:gameId" element={<GamePage />} />
       </Route>
+      <Route path="/" element={<HomePage />} />
       
-      <Route path="/game/:gameId" element={<GamePage />} />
     </Routes>
   );
 }

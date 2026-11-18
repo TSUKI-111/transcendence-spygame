@@ -27,7 +27,7 @@ const navigate = useNavigate();
 
     setMail("");
 
-    navigate("/")
+    navigate("/play")
     // try {
 
     //   const response = await fetch("http://localhost:3000/auth/login", {

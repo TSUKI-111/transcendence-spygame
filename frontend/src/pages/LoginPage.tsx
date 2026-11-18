@@ -1,14 +1,18 @@
 import { useState }from "react"
 import { NavLink } from "react-router-dom";
 import type { SubmitEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
 
   const [mail, setMail] = useState("");
   const [password, setPass] = useState("");
 
+  const navigate = useNavigate();
   function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
+        navigate("/play")
+
     console.log("submitted");
     setMail("");
     setPass("");
