@@ -1,7 +1,7 @@
 
 # M1 — Sprint 1 Documentation
 
-**Module:** Game Engine & Rules  
+**Module:** Game Engine & Rules
 **Status:** Documentation completed — M3/M4 review pending
 
 ## Documents

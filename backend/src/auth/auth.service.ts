@@ -106,6 +106,7 @@ export class AuthService {
   if (typeof token === 'string') {
     await this.sessions.revoke(token);
     }
+
   }
 
     async updateProfile(
@@ -138,4 +139,4 @@ export class AuthService {
     }
   }
 
-} 
+}

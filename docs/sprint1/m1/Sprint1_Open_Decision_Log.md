@@ -1,8 +1,8 @@
 # M1 — Sprint 1 Open Decision Log
 
-**Last planned review:** November 2, 2026 — meeting passed without reviewing these decisions  
-**Last updated:** November 5, 2026  
-**Status:** Sprint 1 documentation completed — integration decisions pending  
+**Last planned review:** November 2, 2026 — meeting passed without reviewing these decisions
+**Last updated:** November 5, 2026
+**Status:** Sprint 1 documentation completed — integration decisions pending
 **Purpose:** Track what must be confirmed before implementing and connecting the Game Engine during Sprint 2.
 
 ## 1. Confirmed Project Decisions

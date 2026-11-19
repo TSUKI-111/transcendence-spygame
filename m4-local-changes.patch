@@ -1,0 +1,190 @@
+diff --git a/.env.example b/.env.example
+index 403f8db..e603b74 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,4 +1,4 @@
+-POSTGRES_USER= transcendence
++POSTGRES_USER=transcendence
+ POSTGRES_PASSWORD=123
+ POSTGRES_DB=transcendence
+ POSTGRES_PORT=5432
+diff --git a/backend/package-lock.json b/backend/package-lock.json
+index 75f6aa6..d437f6e 100644
+--- a/backend/package-lock.json
++++ b/backend/package-lock.json
+@@ -15,6 +15,8 @@
+         "@nestjs/platform-express": "^12.0.1",
+         "@prisma/adapter-pg": "^7.10.0",
+         "@prisma/client": "^7.10.0",
++        "class-transformer": "^0.5.1",
++        "class-validator": "^0.15.1",
+         "pg": "^8.23.1",
+         "reflect-metadata": "^0.2.2",
+         "rxjs": "^7.8.1"
+@@ -110,7 +112,7 @@
+       "version": "7.29.7",
+       "resolved": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.29.7.tgz",
+       "integrity": "sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">=6.9.0"
+@@ -120,7 +122,7 @@
+       "version": "7.29.7",
+       "resolved": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.29.7.tgz",
+       "integrity": "sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">=6.9.0"
+@@ -130,7 +132,7 @@
+       "version": "7.29.9",
+       "resolved": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.9.tgz",
+       "integrity": "sha512-CjXrNHTnvqBVqHgdBysY3vk2T8tpJHb5/RMeHJBTyVa9xgugCB0CJTx/3oO8RV2QRQP391RWpB7D6hLjm8V9uA==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "dependencies": {
+         "@babel/types": "^7.29.8"
+@@ -146,7 +148,7 @@
+       "version": "7.29.8",
+       "resolved": "https://registry.npmjs.org/@babel/types/-/types-7.29.8.tgz",
+       "integrity": "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "dependencies": {
+         "@babel/helper-string-parser": "^7.29.7",
+@@ -2387,6 +2389,12 @@
+         "@types/superagent": "^8.1.0"
+       }
+     },
++    "node_modules/@types/validator": {
++      "version": "13.15.10",
++      "resolved": "https://registry.npmjs.org/@types/validator/-/validator-13.15.10.tgz",
++      "integrity": "sha512-T8L6i7wCuyoK8A/ZeLYt1+q0ty3Zb9+qbSSvrIVitzT3YjZqkTZ40IbRsPanlB4h1QB3JVL1SYCdR6ngtFYcuA==",
++      "license": "MIT"
++    },
+     "node_modules/@visx/curve": {
+       "version": "4.0.1-alpha.0",
+       "resolved": "https://registry.npmjs.org/@visx/curve/-/curve-4.0.1-alpha.0.tgz",
+@@ -3144,6 +3152,23 @@
+         "url": "https://paulmillr.com/funding/"
+       }
+     },
++    "node_modules/class-transformer": {
++      "version": "0.5.1",
++      "resolved": "https://registry.npmjs.org/class-transformer/-/class-transformer-0.5.1.tgz",
++      "integrity": "sha512-SQa1Ws6hUbfC98vKGxZH3KFY0Y1lm5Zm0SY8XX9zbK7FJCyVEac3ATW0RIpwzW+oOfmHE5PMPufDG9hCfoEOMw==",
++      "license": "MIT"
++    },
++    "node_modules/class-validator": {
++      "version": "0.15.1",
++      "resolved": "https://registry.npmjs.org/class-validator/-/class-validator-0.15.1.tgz",
++      "integrity": "sha512-LqoS80HBBSCVhz/3KloUly0ovokxpdOLR++Al3J3+dHXWt9sTKlKd4eYtoxhxyUjoe5+UcIM+5k9MIxyBWnRTw==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/validator": "^13.15.3",
++        "libphonenumber-js": "^1.11.1",
++        "validator": "^13.15.22"
++      }
++    },
+     "node_modules/classnames": {
+       "version": "2.5.1",
+       "resolved": "https://registry.npmjs.org/classnames/-/classnames-2.5.1.tgz",
+@@ -4761,6 +4786,12 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/libphonenumber-js": {
++      "version": "1.13.15",
++      "resolved": "https://registry.npmjs.org/libphonenumber-js/-/libphonenumber-js-1.13.15.tgz",
++      "integrity": "sha512-AHdhEQeDFEJ4GKDAQ9AwxChy+v2kUILUB3TGQRpkXMkWePjXTU/WQEzWVQoIx/Gz8fE73Wr5SEuZCy2vk8jrMQ==",
++      "license": "MIT"
++    },
+     "node_modules/lightningcss": {
+       "version": "1.33.0",
+       "resolved": "https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz",
+@@ -5102,7 +5133,7 @@
+       "version": "0.5.5",
+       "resolved": "https://registry.npmjs.org/magicast/-/magicast-0.5.5.tgz",
+       "integrity": "sha512-UicdXN8zQ3JHlxVq+28afMXPr1z7WNY6+7EJnzTdQWkTAlMLF5fNCCKxJHBQwGaNGR11581EiQmQzx73+MvszA==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
+       "dependencies": {
+         "@babel/parser": "^7.29.7",
+@@ -6616,7 +6647,7 @@
+       "version": "1.2.2",
+       "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+       "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "BSD-3-Clause",
+       "engines": {
+         "node": ">=0.10.0"
+@@ -7070,6 +7101,15 @@
+         }
+       }
+     },
++    "node_modules/validator": {
++      "version": "13.15.35",
++      "resolved": "https://registry.npmjs.org/validator/-/validator-13.15.35.tgz",
++      "integrity": "sha512-TQ5pAGhd5whStmqWvYF4OjQROlmv9SMFVt37qoCBdqRffuuklWYQlCNnEs2ZaIBD1kZRNnikiZOS1eqgkar0iw==",
++      "license": "MIT",
++      "engines": {
++        "node": ">= 0.10"
++      }
++    },
+     "node_modules/vary": {
+       "version": "1.1.2",
+       "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
+diff --git a/backend/package.json b/backend/package.json
+index 04cc9fe..9ca1ba4 100644
+--- a/backend/package.json
++++ b/backend/package.json
+@@ -28,6 +28,8 @@
+     "@nestjs/platform-express": "^12.0.1",
+     "@prisma/adapter-pg": "^7.10.0",
+     "@prisma/client": "^7.10.0",
++    "class-transformer": "^0.5.1",
++    "class-validator": "^0.15.1",
+     "pg": "^8.23.1",
+     "reflect-metadata": "^0.2.2",
+     "rxjs": "^7.8.1"
+diff --git a/backend/src/app.module.ts b/backend/src/app.module.ts
+index e999977..caabc2a 100644
+--- a/backend/src/app.module.ts
++++ b/backend/src/app.module.ts
+@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
+ import { AppController } from './app.controller.js';
+ import { AppService } from './app.service.js';
+ import { PrismaModule } from './prisma/prisma.module.js';
++import { RoomsModule } from './rooms/rooms.module.js';
+ 
+ @Module({
+-  imports: [PrismaModule],
++  imports: [PrismaModule, RoomsModule],
+   controllers: [AppController],
+   providers: [AppService],
+ })
+-export class AppModule {}
+\ No newline at end of file
++export class AppModule {}
+diff --git a/backend/src/main.ts b/backend/src/main.ts
+index a5951c7..0b3513f 100644
+--- a/backend/src/main.ts
++++ b/backend/src/main.ts
+@@ -1,8 +1,10 @@
+ import { NestFactory } from '@nestjs/core';
+ import { AppModule } from './app.module.js';
++import { ValidationPipe } from '@nestjs/common';
+ 
+ async function bootstrap() {
+   const app = await NestFactory.create(AppModule);
++  app.useGlobalPipes(new ValidationPipe({transform: true, whitelist: true, forbidNonWhitelisted: true}));
+ 
+   await app.listen(process.env.PORT ?? 3000);
+ }

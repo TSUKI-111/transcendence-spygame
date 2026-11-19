@@ -17,3 +17,73 @@ export const RoomStatus = {
 } as const
 
 export type RoomStatus = (typeof RoomStatus)[keyof typeof RoomStatus]
+
+
+export const GamePhase = {
+  ROLE_ASSIGNMENT: 'ROLE_ASSIGNMENT',
+  CLUE_SUBMISSION: 'CLUE_SUBMISSION',
+  DISCUSSION: 'DISCUSSION',
+  VOTING: 'VOTING',
+  FINISHED: 'FINISHED',
+  TERMINATED: 'TERMINATED'
+} as const
+
+export type GamePhase = (typeof GamePhase)[keyof typeof GamePhase]
+
+
+export const GameWinner = {
+  SPY: 'SPY',
+  DETECTIVES: 'DETECTIVES'
+} as const
+
+export type GameWinner = (typeof GameWinner)[keyof typeof GameWinner]
+
+
+export const TerminationReason = {
+  SPY_DEPARTED: 'SPY_DEPARTED',
+  INSUFFICIENT_PLAYERS: 'INSUFFICIENT_PLAYERS'
+} as const
+
+export type TerminationReason = (typeof TerminationReason)[keyof typeof TerminationReason]
+
+
+export const GameRole = {
+  SPY: 'SPY',
+  DETECTIVE: 'DETECTIVE'
+} as const
+
+export type GameRole = (typeof GameRole)[keyof typeof GameRole]
+
+
+export const ParticipationStatus = {
+  ACTIVE: 'ACTIVE',
+  ELIMINATED: 'ELIMINATED',
+  DEPARTED: 'DEPARTED'
+} as const
+
+export type ParticipationStatus = (typeof ParticipationStatus)[keyof typeof ParticipationStatus]
+
+
+export const ConnectionStatus = {
+  CONNECTED: 'CONNECTED',
+  DISCONNECTED: 'DISCONNECTED'
+} as const
+
+export type ConnectionStatus = (typeof ConnectionStatus)[keyof typeof ConnectionStatus]
+
+
+export const RoundOutcome = {
+  ELIMINATED: 'ELIMINATED',
+  TIE: 'TIE',
+  NO_VOTES: 'NO_VOTES'
+} as const
+
+export type RoundOutcome = (typeof RoundOutcome)[keyof typeof RoundOutcome]
+
+
+export const ChatChannel = {
+  LOBBY: 'LOBBY',
+  DISCUSSION: 'DISCUSSION'
+} as const
+
+export type ChatChannel = (typeof ChatChannel)[keyof typeof ChatChannel]
