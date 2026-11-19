@@ -11,7 +11,9 @@
 
 export const RoomStatus = {
   WAITING: 'WAITING',
-  IN_GAME: 'IN_GAME'
+  IN_GAME: 'IN_GAME',
+  FINISHED: 'FINISHED',
+  CLOSED: 'CLOSED'
 } as const
 
 export type RoomStatus = (typeof RoomStatus)[keyof typeof RoomStatus]
