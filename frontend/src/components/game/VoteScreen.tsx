@@ -56,47 +56,74 @@ const [selectedId, setSelectedId] = useState<number | null>(1);
   const display = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   const percent = (time / total) * 100;
   return (
-    <div className="flex">
-      <div className="w-2/3">
-        <div id="timer" className=" flex flex-col justify-center ">
-          <div className="flex justify-center">
-            <img src={ava} />
-            <p> Discussion - {time} s</p>
-          </div>
-          <p className="text-5xl font-mono text-center">{display}</p>
-          <div className="h-2 w-full rounded-full bg-slate-700">
-            <div
-              className="h-2 rounded-full bg-violet-500"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <h1 className=" justify-center flex text-3xl mt-6">Who do you suspect ? </h1>
-          <p className="justify-center flex mb-6"> choose who you think is the spy</p>
-          <div className="flex flex-wrap gap-4" id="player-cards">
-            {players.map((player) => (
-              <button type="button" onClick={() => (HandleSelect(player.id))}
-                key={player.id}
-                className={
-                    "flex w-28 flex-col items-center gap-3 rounded-xl bg-slate-800 p-3" +( player.id === selectedId ? " ring-2 ring-violet-500" : "" )
-                }
-              >
-                <p className="text-sm">{player.name}</p>
-                <img
-                  src={player.avatarurl}
-                  className="h-16 w-16 rounded-full object-cover ring-2 ring-violet-500"
-                />
-                <p className="w-full truncate rounded-md bg-slate-900 px-2 py-1 text-center text-sm">
-                  {clues.find((clue) => clue.playerId === player.id)?.text}
-                </p>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="p-2 mt-6 mr-4 border rounded-xl bg-violet-500">Submit choice </button> 
+  <div className="flex flex-col gap-6 p-6 text-white xl:flex-row">
+    <div className="flex flex-1 flex-col gap-6">
+      <div
+        id="timer"
+        className="flex flex-col items-center gap-3 rounded-2xl border border-violet-500/50 bg-linear-to-b from-indigo-950 to-slate-900 p-6"
+      >
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <img src={ava} className="h-6 w-6" />
+          <p>Vote - {total} s</p>
+        </div>
+        <p className="text-center font-mono text-5xl font-bold">{display}</p>
+        <div className="h-2 w-full max-w-md rounded-full bg-slate-700">
+          <div
+            className="h-2 rounded-full bg-violet-500"
+            style={{ width: `${percent}%` }}
+          />
         </div>
       </div>
-      <div className="w-1/3 h-screen border">
-        <h1 className="w-full">chat goes here</h1>
+
+      <div className="text-center">
+        <h1 className="text-3xl font-bold">Who do you suspect ?</h1>
+        <p className="text-sm text-slate-300">choose who you think is the spy</p>
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-4" id="player-cards">
+        {players.map((player) => (
+          <button
+            type="button"
+            onClick={() => HandleSelect(player.id)}
+            key={player.id}
+            className={`flex w-28 flex-col items-center gap-3 rounded-xl p-3 ${
+              player.id === selectedId
+                ? "bg-violet-500/20 ring-2 ring-violet-500"
+                : "bg-slate-900/60"
+            }`}
+          >
+            <p className="text-sm">{player.name}</p>
+            <img
+              src={player.avatarurl}
+              className={`h-16 w-16 rounded-full bg-slate-400 object-cover ring-2 ${
+                player.id === selectedId ? "ring-violet-500" : "ring-slate-600"
+              }`}
+            />
+            <p className="w-full truncate rounded-md bg-slate-900 px-2 py-1 text-center text-sm">
+              {clues.find((clue) => clue.playerId === player.id)?.text}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex justify-center">
+        <button type="button" className="h-12 rounded-xl bg-violet-500 px-8 font-semibold">
+          Submit choice
+        </button>
       </div>
     </div>
-  );
+
+    <div className="flex w-full flex-col gap-4 rounded-2xl border border-violet-500/50 bg-linear-to-b from-indigo-950 to-slate-900 p-4 xl:w-1/3">
+        <h1 className="font-bold">Room chat</h1>
+        <p className="flex-1 text-sm text-slate-300">chat will go here</p>
+        <form className="flex gap-2">
+          <input
+            placeholder="chat here"
+            className="h-11 min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3"
+          ></input>
+          <button className="h-11 rounded-lg bg-violet-500 px-4 font-semibold"> send</button>
+        </form>
+      </div>
+  </div>
+);
 }

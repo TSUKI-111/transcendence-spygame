@@ -7,12 +7,12 @@ export default function HomePage() {
   const navigate = useNavigate();
   return (
     <div
-      className="flex flex-col min-h-screen bg-slate-950 text-white "
+      className="flex flex-col min-h-screen bg-slate-950 text-white bg-cover bg-center bg-no-repeat"
       style={{ backgroundImage: `url(${img})` }}
     >
       <div className="flex justify-between">
         <h1 className="text-4xl">
-          {" "}
+          
           SPY <span className="text-violet-500"> GAME </span>{" "}
         </h1>
         <div>
