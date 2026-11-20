@@ -33,7 +33,32 @@ describe('GameService', () => {
     vote: {
       create: vi.fn(),
     },
+
+    $transaction: vi.fn(),
   };
+
+  const txMock = {
+    game: {
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+    },
+
+    gameRound: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      create: vi.fn(),
+    },
+
+    gamePlayer: {
+      updateMany: vi.fn(),
+      update: vi.fn(),
+    },
+
+    vote: {
+      findMany: vi.fn(),
+    },
+  };
+
 
   const dbDeadline = new Date('2030-01-01T12:00:00.000Z');
 
@@ -90,6 +115,71 @@ describe('GameService', () => {
   }
 
 
+  const players3 = [
+    {
+      id: 11,
+      userId: 1,
+      role: 'SPY',
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'CONNECTED',
+    },
+    {
+      id: 12,
+      userId: 2,
+      role: 'DETECTIVE',
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'CONNECTED',
+    },
+    {
+      id: 13,
+      userId: 3,
+      role: 'DETECTIVE',
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'CONNECTED',
+    },
+  ];
+
+  function mockRoundResolution(
+    voteTargets: number[],
+    players = players3,
+  ) {
+    const gameId = randomUUID();
+    const roomId = randomUUID();
+
+    txMock.game.findUnique.mockResolvedValueOnce({
+      roomId,
+      phase: 'VOTING',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+      players,
+    });
+
+    txMock.gameRound.findUnique.mockResolvedValueOnce({
+      id: 101,
+    });
+
+    txMock.vote.findMany.mockResolvedValueOnce(
+      voteTargets.map(targetGamePlayerId => ({
+        targetGamePlayerId,
+      }))
+    );
+
+    txMock.game.updateMany.mockResolvedValueOnce({
+      count: 1,
+    });
+
+    txMock.gamePlayer.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+
+    txMock.gamePlayer.update.mockResolvedValueOnce({});
+    txMock.gameRound.update.mockResolvedValueOnce({});
+    txMock.gameRound.create.mockResolvedValueOnce({});
+
+    return { gameId, roomId };
+  }
+
+
   beforeEach(async () => {
     // Reset mock state before every test
     prismaMock.game.findUnique.mockReset();
@@ -119,6 +209,27 @@ describe('GameService', () => {
     }).compile();
 
     service = moduleRef.get<GameService>(GameService);
+
+    prismaMock.$transaction.mockReset();
+
+    txMock.game.findUnique.mockReset();
+    txMock.game.updateMany.mockReset();
+
+    txMock.gameRound.findUnique.mockReset();
+    txMock.gameRound.update.mockReset();
+    txMock.gameRound.create.mockReset();
+
+    txMock.gamePlayer.updateMany.mockReset();
+    txMock.gamePlayer.update.mockReset();
+
+    txMock.vote.findMany.mockReset();
+
+    // Execute transactions against the fake transaction client.
+    prismaMock.$transaction.mockImplementation(
+      async (
+        operation: (tx: typeof txMock) => Promise<unknown>
+      ) => operation(txMock)
+    );
   });
 
   // ==========================================
@@ -618,21 +729,24 @@ describe('GameService', () => {
     expect(prismaMock.game.updateMany).not.toHaveBeenCalled();
   });
 
-  it('does not resolve voting before voting logic exists', async () => {
+  
+  it('resolves voting when its deadline expires', async () => {
+    const { gameId } = mockRoundResolution([11, 11, 12]);
+
     prismaMock.game.findUnique.mockResolvedValueOnce({
       phase: 'VOTING',
       phaseEndsAt: dbDeadline,
     });
 
-    await expect(
-      service.advancePhaseIfExpired(
-        randomUUID(),
-        dbDeadline.getTime()
-      )
-    ).rejects.toThrow('ROUND_RESOLUTION_NOT_IMPLEMENTED');
-  
-    expect(prismaMock.game.updateMany).not.toHaveBeenCalled();
+    const changed = await service.advancePhaseIfExpired(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(changed).toBe(true);
+    expect(txMock.gameRound.update).toHaveBeenCalledTimes(1);
   });
+
 
 
   // ==========================================
@@ -863,5 +977,203 @@ describe('GameService', () => {
 
     expect(prismaMock.vote.create).not.toHaveBeenCalled();
   });
+
+
+// ==========================================
+// 6. ROUND RESOLUTION AND VICTORY
+// ==========================================
+
+  it('Detectives win when the Spy is eliminated', async () => {
+    const { gameId, roomId } =
+      mockRoundResolution([11, 11, 12]);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('ELIMINATED');
+    expect(result.eliminatedUserId).toBe(1);
+    expect(result.eliminatedRole).toBe('SPY');
+    expect(result.nextPhase).toBe('FINISHED');
+
+    expect(result.finalResult).toEqual({
+      gameId,
+      roomId,
+      status: 'FINISHED',
+      winner: 'DETECTIVES',
+      reason: null,
+      endedAt: dbDeadline.toISOString(),
+    });
+
+    expect(txMock.gamePlayer.update).toHaveBeenCalledWith({
+      where: { id: 11 },
+      data: {
+        participationStatus: 'ELIMINATED',
+      },
+    });
+
+    expect(txMock.gameRound.create).not.toHaveBeenCalled();
+  });
+
+  it('Spy wins when Detective elimination leaves two players', async () => {
+    const { gameId } =
+      mockRoundResolution([12, 12, 11]);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.eliminatedUserId).toBe(2);
+    expect(result.eliminatedRole).toBe('DETECTIVE');
+    expect(result.nextPhase).toBe('FINISHED');
+    expect(result.finalResult?.winner).toBe('SPY');
+  });
+
+  it('continues after Detective elimination with four players', async () => {
+    const players4 = [
+      ...players3,
+      {
+        id: 14,
+        userId: 4,
+        role: 'DETECTIVE',
+        participationStatus: 'ACTIVE',
+        connectionStatus: 'CONNECTED',
+      },
+    ];
+
+    const { gameId } =
+      mockRoundResolution([12, 12, 11, 13], players4);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('ELIMINATED');
+    expect(result.eliminatedUserId).toBe(2);
+    expect(result.nextPhase).toBe('CLUE_SUBMISSION');
+    expect(result.finalResult).toBeNull();
+
+    expect(txMock.gameRound.create).toHaveBeenCalledWith({
+      data: {
+        gameId,
+        number: 2,
+      },
+    });
+  });
+
+  it('handles a tie without eliminating anyone', async () => {
+    const { gameId } =
+      mockRoundResolution([11, 12, 13]);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('TIE');
+    expect(result.eliminatedUserId).toBeNull();
+    expect(result.nextPhase).toBe('CLUE_SUBMISSION');
+
+    expect(txMock.gamePlayer.update).not.toHaveBeenCalled();
+    expect(txMock.gameRound.create).toHaveBeenCalled();
+  });
+
+  it('handles a round with no votes', async () => {
+    const { gameId } = mockRoundResolution([]);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('NO_VOTES');
+    expect(result.eliminatedUserId).toBeNull();
+    expect(result.nextPhase).toBe('CLUE_SUBMISSION');
+    expect(result.finalResult).toBeNull();
+  });
+
+  it('terminates with no winner if the Spy departed', async () => {
+    const disconnectedPlayers = players3.map(player =>
+      player.role === 'SPY'
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    const { gameId } =
+      mockRoundResolution([11, 11], disconnectedPlayers);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.nextPhase).toBe('TERMINATED');
+    expect(result.outcome).toBeNull();
+    expect(result.finalResult?.winner).toBeNull();
+    expect(result.finalResult?.reason).toBe('SPY_DEPARTED');
+
+    expect(txMock.gamePlayer.updateMany).toHaveBeenCalled();
+    expect(txMock.gameRound.update).not.toHaveBeenCalled();
+  });
+
+  it('terminates if departures leave fewer than three players', async () => {
+    const disconnectedPlayers = players3.map(player =>
+      player.id === 12
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    const { gameId } =
+      mockRoundResolution([], disconnectedPlayers);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.nextPhase).toBe('TERMINATED');
+    expect(result.finalResult?.winner).toBeNull();
+    expect(result.finalResult?.reason).toBe(
+      'INSUFFICIENT_PLAYERS'
+    );
+  });
+
+  it('rejects resolution before the voting deadline', async () => {
+    const { gameId } =
+      mockRoundResolution([11, 11, 12]);
+
+    await expect(
+      service.resolveRound(
+        gameId,
+        dbDeadline.getTime() - 1
+      )
+    ).rejects.toThrow('PHASE_NOT_EXPIRED');
+
+    expect(txMock.game.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects resolution when the phase changed concurrently', async () => {
+    const { gameId } =
+      mockRoundResolution([11, 11, 12]);
+
+    txMock.game.updateMany.mockReset();
+    txMock.game.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+
+    await expect(
+      service.resolveRound(
+        gameId,
+        dbDeadline.getTime()
+      )
+    ).rejects.toThrow('ROUND_ALREADY_RESOLVED');
+
+    expect(txMock.gameRound.update).not.toHaveBeenCalled();
+    expect(txMock.gamePlayer.update).not.toHaveBeenCalled();
+  });
+
 
 });

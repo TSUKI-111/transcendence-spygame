@@ -2,9 +2,13 @@ import {Injectable} from "@nestjs/common";
 import {randomInt, randomUUID} from "node:crypto";
 import {PrismaService} from "../prisma/prisma.service.js";
 
-import type {StartGameRequest, StartGameResponse} from "./contracts/start-game.interface.js";
-import type {GameRole, PlayerGameState} from "./contracts/player-game-state.interface.js";
-import type {AcceptedClue} from "./contracts/clue.interface.js";
+import {calculateVotingOutcome} from "./round-resolution.js";
+
+import type {StartGameRequest, StartGameResponse} from "./contracts/start-game.interface.ts";
+import type {GameRole, PlayerGameState} from "./contracts/player-game-state.interface.ts";
+import type {AcceptedClue} from "./contracts/clue.interface.ts";
+import type {RoundResolutionResult} from "./contracts/round-resolution.interface.ts";
+import type {GameFinalResult} from "./contracts/game-final-result.interface.ts";
 
 // Predefined backend word list for the game
 const SECRET_WORDS = ["apple", "banana", "cherry", "ocean", "mountain", "river", "forest", "desert", "city", "village", "pizza", "pasta", "burger"];
@@ -60,8 +64,8 @@ export class GameService
 
 		const players: 
 		{
-  			userId: number;
-  			role: GameRole;
+			userId: number;
+			role: GameRole;
 		}[] = ids.map((userId, index) => ({userId, role: index === spyIndex ? "SPY" : "DETECTIVE"}));
 
 		// Choose secret word
@@ -548,6 +552,251 @@ export class GameService
 		}
 	}
 
+	
+	async resolveRound(gameId: string, nowMs: number = Date.now()): Promise<RoundResolutionResult> 
+	{
+		return this.prisma.$transaction(async tx => 
+		{
+
+	    	// Read the game and all its original players
+			const game = await tx.game.findUnique(
+			{
+				where: 
+				{ 
+					id: gameId 
+				},
+				select: 
+				{
+					roomId: true,
+					phase: true,
+					currentRoundNumber: true,
+					phaseEndsAt: true,
+					players: 
+					{
+						select: 
+						{
+							id: true,
+							userId: true,
+							role: true,
+							participationStatus: true,
+							connectionStatus: true,
+						},
+					},
+				},
+			});
+			if (!game) 
+			{
+				throw new Error('GAME_NOT_FOUND');
+			}
+
+			if (game.phase !== 'VOTING') 
+			{
+				throw new Error('INVALID_PHASE');
+			}
+
+			if (game.phaseEndsAt === null || nowMs < game.phaseEndsAt.getTime()) 
+			{
+				throw new Error('PHASE_NOT_EXPIRED');
+			}
+
+	    	// Read the current round
+			const round = await tx.gameRound.findUnique(
+			{
+				where: 
+				{
+					gameId_number: 
+					{
+						gameId,
+						number: game.currentRoundNumber,
+					},
+				},
+				select: 
+				{ 
+					id: true 
+				},
+			});
+			
+			if (!round) 
+			{
+				throw new Error('ROUND_NOT_FOUND');
+			}
+
+	    	// Read all votes from this round
+			const votes = await tx.vote.findMany(
+			{
+				where: 
+				{ 
+					roundId: round.id 
+				},
+				select: 
+				{
+					targetGamePlayerId: true,
+				},
+			});
+
+	    	// Players disconnected at resolution depart.
+			const disconnected = game.players.filter(player => player.participationStatus === 'ACTIVE' && player.connectionStatus === 'DISCONNECTED');
+
+			const activePlayers = game.players.filter(player => player.participationStatus === 'ACTIVE' && player.connectionStatus === 'CONNECTED');
+
+	    	// Departures may terminate the game.
+			let reason: GameFinalResult['reason'] = null;
+
+			if (disconnected.some(player => player.role === 'SPY')) 
+			{
+				reason = 'SPY_DEPARTED';
+			} 
+			else if (activePlayers.length <= 2) 
+			{
+				reason = 'INSUFFICIENT_PLAYERS';
+			}
+
+		    // 6. Count votes only if the game can continue.
+			const result = reason === null ? calculateVotingOutcome(activePlayers, votes) : null;
+
+			const eliminated = result?.eliminated ?? null;
+
+			// 7. Determine the winner, if any.
+			let winner: GameFinalResult['winner'] = null;
+
+			if (reason === null && eliminated) 
+			{
+				if (eliminated.role === 'SPY') 
+				{
+					winner = 'DETECTIVES';
+				}
+				else if (activePlayers.length - 1 <= 2) 
+				{
+					winner = 'SPY';
+				}
+			}
+
+	    	// Choose the next game phase.
+			const nextPhase: 'CLUE_SUBMISSION' | 'FINISHED' | 'TERMINATED' = reason !== null ? 'TERMINATED' : winner !== null ? 'FINISHED' : 'CLUE_SUBMISSION';
+
+			const endedAt = new Date(nowMs);
+
+	   			// A new round starts with a fresh 60-second deadline.
+					const nextDeadline = nextPhase === 'CLUE_SUBMISSION' ? new Date(nowMs + 60_000) : null;
+
+	    	// Claim this round resolution.
+			const updated = await tx.game.updateMany(
+			{
+				where: 
+				{
+					id: gameId,
+					phase: 'VOTING',
+					phaseEndsAt: game.phaseEndsAt,
+				},
+				data: 
+				{
+					phase: nextPhase,
+					currentRoundNumber:
+						nextPhase === 'CLUE_SUBMISSION' ? game.currentRoundNumber + 1 : game.currentRoundNumber,
+					phaseEndsAt: nextDeadline,
+					winner,
+					terminationReason: reason,
+					endedAt: nextPhase === 'CLUE_SUBMISSION' ? null : endedAt,
+				},
+			});
+
+			if (updated.count !== 1) 
+			{
+				throw new Error('ROUND_ALREADY_RESOLVED');
+			}
+
+	    // Permanently remove disconnected participants from gameplay, but keep their historical records.
+		if (disconnected.length > 0) 
+		{
+			await tx.gamePlayer.updateMany(
+			{
+				where: 
+				{
+					gameId,
+					participationStatus: 'ACTIVE',
+					connectionStatus: 'DISCONNECTED',
+				},
+				data: 
+				{
+					participationStatus: 'DEPARTED',
+				},
+			});
+		}
+
+	    // Save the voting outcome. If the game terminated due to departures, the round remains unresolved.
+		if (reason === null && result) 
+		{
+			await tx.gameRound.update(
+			{
+				where: 
+				{ 
+					id: round.id 
+				},
+				data: 
+				{
+					outcome: result.outcome,
+					eliminatedGamePlayerId: eliminated?.id ?? null,
+					resolvedAt: endedAt,
+				},
+			});
+
+			if (eliminated) 
+			{
+				await tx.gamePlayer.update(
+				{
+					where: 
+					{
+						id: eliminated.id 
+					},
+					data: 
+					{
+						participationStatus: 'ELIMINATED',
+					},
+				});
+			}
+
+	      	// Create Round 2, Round 3, etc.
+			if (nextPhase === 'CLUE_SUBMISSION') 
+			{
+				await tx.gameRound.create(
+				{
+					data: 
+					{
+						gameId,
+						number: game.currentRoundNumber + 1,
+					},
+				});
+			}
+		}
+
+			// Build the final result for M4, if terminal.
+			const finalResult: GameFinalResult | null = nextPhase === 'CLUE_SUBMISSION' ? null: 
+			{
+				gameId,
+				roomId: game.roomId,
+				status: nextPhase,
+				winner,
+				reason,
+				endedAt: endedAt.toISOString(),
+			};
+
+			return {
+				gameId,
+				roundNumber: game.currentRoundNumber,
+				outcome: result?.outcome ?? null,
+				eliminatedUserId: eliminated?.userId ?? null,
+				eliminatedRole: eliminated?.role ?? null,
+				nextPhase,
+				phaseEndsAt: nextDeadline?.toISOString() ?? null,
+				finalResult,
+			};
+
+	}, 
+	{
+		isolationLevel: 'Serializable'
+	});
+}
+
 	async advancePhaseIfExpired(gameId: string, nowMs: number = Date.now()): Promise<boolean>
 	{
 		// Find the game
@@ -599,7 +848,8 @@ export class GameService
 		}
 		else if (game.phase === "VOTING")
 		{
-			throw new Error("ROUND_RESOLUTION_NOT_IMPLEMENTED");
+			await this.resolveRound(gameId, nowMs);
+			return true;
 		}
 		else
 		{

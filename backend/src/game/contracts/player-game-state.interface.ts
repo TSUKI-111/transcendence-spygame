@@ -1,5 +1,5 @@
-import {GamePhase} from "./game-phase.type.js";
-import type {AcceptedClue} from "./clue.interface.js"
+import type {GamePhase} from "./game-phase.type.ts";
+import type {AcceptedClue} from "./clue.interface.ts"
 
 export type GameRole = "SPY" | "DETECTIVE";
 
