@@ -403,6 +403,151 @@ export class GameService
 		};
 	}
 
+	async submitVote(gameId: string, voterUserId: number, targetUserId: number, nowMs: number = Date.now()): Promise<void>
+	{
+		// Validate IDs
+		if (typeof gameId !== "string" || gameId.trim() === "" || !Number.isSafeInteger(voterUserId) || voterUserId <= 0 || !Number.isSafeInteger(targetUserId) || targetUserId <= 0)
+		{
+			throw new Error("INVALID_VOTE_REQUEST");
+		}
+
+		// Find the game
+		const game = await this.prisma.game.findUnique(
+		{
+			where:
+			{
+				id : gameId,
+			},
+			select:
+			{
+				phase: true,
+				currentRoundNumber: true,
+				phaseEndsAt: true,
+			},
+		});
+
+		if (!game)
+		{
+			throw new Error("GAME_NOT_FOUND");
+		}
+
+		// Check the voting phase
+		if (game.phase !== "VOTING")
+		{
+			throw new Error("INVALID_PHASE");
+		}
+
+		// Check the voting deadline
+		if (game.phaseEndsAt === null || nowMs >= game.phaseEndsAt.getTime())
+		{
+			throw new Error("PHASE_EXPIRED");
+		}
+
+		// Find the voter in this game
+		const voter = await this.prisma.gamePlayer.findUnique(
+		{
+			where:
+			{
+				gameId_userId : 
+				{
+					gameId,
+					userId: voterUserId,
+				},
+			},
+			select:
+			{
+				id: true,
+				participationStatus: true,
+				connectionStatus: true,
+			},
+		});
+		
+		if (!voter)
+		{
+			throw new Error("NOT_GAME_PARTICIPANT");
+		}
+
+		// Check whether the voter can vote
+		if (voter.participationStatus !== "ACTIVE" || voter.connectionStatus !== "CONNECTED")
+		{
+			throw new Error("VOTER_NOT_ELIGIBLE");
+		}
+
+		// Find the target player in the same game
+		const target = await this.prisma.gamePlayer.findUnique(
+		{
+			where:
+			{
+				gameId_userId : 
+				{
+					gameId,
+					userId: targetUserId,
+				},
+			},
+			select:
+			{
+				id: true,
+				participationStatus: true,
+			},
+		});
+
+		// Find the current round
+		const round = await this.prisma.gameRound.findUnique(
+		{
+			where:
+			{
+				gameId_number: 
+				{
+					gameId,
+					number: game.currentRoundNumber,
+				}
+			},
+			select:
+			{
+				id: true,
+			},
+		});
+
+		if (!round)
+		{
+			throw new Error("ROUND_NOT_FOUND");
+		}
+
+		if (!target) 
+		{
+			throw new Error('INVALID_VOTE_TARGET');
+		}
+
+		if (target.participationStatus !== 'ACTIVE') 
+		{
+			throw new Error('INVALID_VOTE_TARGET');
+		}
+
+		// Save the private vote
+		try
+		{
+			await this.prisma.vote.create(
+			{
+				data:
+				{
+					roundId: round.id,
+					voterGamePlayerId: voter.id,
+					targetGamePlayerId: target.id,
+					submittedAt: new Date(nowMs),
+				},
+			});
+		}
+		catch (error)
+		{
+			// One vote per player per round
+			if (error !== null && typeof error === "object" && "code" in error && error.code === "P2002")
+			{
+				throw new Error("VOTE_ALREADY_SUBMITTED");
+			}
+			throw error;
+		}
+	}
+
 	async advancePhaseIfExpired(gameId: string, nowMs: number = Date.now()): Promise<boolean>
 	{
 		// Find the game

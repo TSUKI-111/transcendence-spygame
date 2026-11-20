@@ -29,6 +29,10 @@ describe('GameService', () => {
       create: vi.fn(),
       findUnique: vi.fn(),
     },
+
+    vote: {
+      create: vi.fn(),
+    },
   };
 
   const dbDeadline = new Date('2030-01-01T12:00:00.000Z');
@@ -54,6 +58,38 @@ describe('GameService', () => {
     prismaMock.clue.create.mockResolvedValueOnce({});
   }
 
+
+  function mockVotingDatabase(targetPlayerId = 88) {
+    // Game is currently in the voting phase
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      phase: 'VOTING',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+    });
+
+    // Voter
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'CONNECTED',
+    });
+
+    // Target
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: targetPlayerId,
+      participationStatus: 'ACTIVE',
+    });
+
+    // Current round
+    prismaMock.gameRound.findUnique.mockResolvedValueOnce({
+      id: 99,
+    });
+
+    // Successful database insertion
+    prismaMock.vote.create.mockResolvedValueOnce({});
+  }
+
+
   beforeEach(async () => {
     // Reset mock state before every test
     prismaMock.game.findUnique.mockReset();
@@ -69,6 +105,8 @@ describe('GameService', () => {
     // Default database responses
     prismaMock.game.findUnique.mockResolvedValue(null);
     prismaMock.game.create.mockResolvedValue({});
+
+    prismaMock.vote.create.mockReset();
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -592,7 +630,238 @@ describe('GameService', () => {
         dbDeadline.getTime()
       )
     ).rejects.toThrow('ROUND_RESOLUTION_NOT_IMPLEMENTED');
-
+  
     expect(prismaMock.game.updateMany).not.toHaveBeenCalled();
   });
+
+
+  // ==========================================
+  // 5. PRIVATE VOTING
+  // ==========================================
+
+  it('accepts a valid private vote', async () => {
+    mockVotingDatabase();
+
+    const gameId = randomUUID();
+    const time = dbDeadline.getTime() - 1000;
+
+    const result = await service.submitVote(
+      gameId, 1, 2, time
+    );
+
+    expect(result).toBeUndefined();
+
+    expect(prismaMock.vote.create).toHaveBeenCalledWith({
+      data: {
+        roundId: 99,
+        voterGamePlayerId: 77,
+        targetGamePlayerId: 88,
+        submittedAt: new Date(time),
+      },
+    });
+  });
+
+  it('allows self-voting', async () => {
+    // The voter and target have the same GamePlayer ID.
+    mockVotingDatabase(77);
+
+    await service.submitVote(
+      randomUUID(),
+      1,
+      1,
+      dbDeadline.getTime() - 1000,
+    );
+
+    expect(prismaMock.vote.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        voterGamePlayerId: 77,
+        targetGamePlayerId: 77,
+      }),
+    });
+  });
+
+  it('rejects a second vote in the same round', async () => {
+    mockVotingDatabase();
+
+    prismaMock.vote.create.mockReset();
+    prismaMock.vote.create.mockRejectedValueOnce({
+      code: 'P2002',
+    });
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('VOTE_ALREADY_SUBMITTED');
+  });
+
+  it('rejects voting outside the VOTING phase', async () => {
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      phase: 'DISCUSSION',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+    });
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('INVALID_PHASE');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects votes at the deadline', async () => {
+    mockVotingDatabase();
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+        dbDeadline.getTime(),
+      )
+    ).rejects.toThrow('PHASE_EXPIRED');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a voter outside the game', async () => {
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      phase: 'VOTING',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+    });
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        99,
+        2,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('NOT_GAME_PARTICIPANT');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a disconnected voter', async () => {
+    mockVotingDatabase();
+
+    // Replace the voter with a disconnected player.
+    prismaMock.gamePlayer.findUnique.mockReset();
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'DISCONNECTED',
+    });
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('VOTER_NOT_ELIGIBLE');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an eliminated voter', async () => {
+    mockVotingDatabase();
+
+    prismaMock.gamePlayer.findUnique.mockReset();
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'ELIMINATED',
+      connectionStatus: 'CONNECTED',
+    });
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('VOTER_NOT_ELIGIBLE');
+  });
+
+  it('rejects a target outside the game', async () => {
+    mockVotingDatabase();
+
+    // The voter exists, but the target doesn't.
+    prismaMock.gamePlayer.findUnique.mockReset();
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'CONNECTED',
+    });
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        99,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('INVALID_VOTE_TARGET');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an eliminated target', async () => {
+    mockVotingDatabase();
+
+    prismaMock.gamePlayer.findUnique.mockReset();
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'ACTIVE',
+      connectionStatus: 'CONNECTED',
+    });
+
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 88,
+      participationStatus: 'ELIMINATED',
+    });
+
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+        dbDeadline.getTime() - 1000,
+      )
+    ).rejects.toThrow('INVALID_VOTE_TARGET');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects voting in an unknown game', async () => {
+    await expect(
+      service.submitVote(
+        randomUUID(),
+        1,
+        2,
+      )
+    ).rejects.toThrow('GAME_NOT_FOUND');
+
+    expect(prismaMock.vote.create).not.toHaveBeenCalled();
+  });
+
 });
