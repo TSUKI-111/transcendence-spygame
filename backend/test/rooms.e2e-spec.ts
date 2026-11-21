@@ -7,7 +7,7 @@ import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
 import { RoomsController } from '../src/rooms/rooms.controller.js';
 import { RoomsService } from '../src/rooms/rooms.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { RequireUserGuard } from '../src/auth/guards/require-user.guard.js';
+import { SessionAuthGuard } from '../src/auth/guards/session-auth.guard.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
 
 describe('RoomsController (e2e)', () => {
@@ -68,7 +68,7 @@ describe('RoomsController (e2e)', () => {
         },
       ],
     })
-      .overrideGuard(RequireUserGuard)
+      .overrideGuard(SessionAuthGuard)
       .useValue({
         canActivate: (context: {
           switchToHttp: () => {

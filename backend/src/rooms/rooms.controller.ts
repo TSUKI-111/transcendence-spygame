@@ -24,7 +24,7 @@ import {
 } from '@nestjs/swagger';
 import { CreateRoomDto } from './dto/create-room.dto.js';
 import { RoomsService } from './rooms.service.js';
-import { RequireUserGuard } from '../auth/guards/require-user.guard.js';
+import { SessionAuthGuard } from '../auth/guards/session-auth.guard.js';
 import type { RequestWithUser } from '../auth/types/request-with-user.type.js';
 import { RoomListResponseDto } from './dto/room-list-response.dto.js';
 import { RoomDetailsResponseDto } from './dto/room-details-response.dto.js';
@@ -32,7 +32,7 @@ import { CreatedRoomResponseDto } from './dto/create-room-response.dto.js';
 import { JoinRoomByCodeDto } from './dto/join-room.dto.js';
 @ApiTags('Rooms')
 @ApiBearerAuth()
-@UseGuards(RequireUserGuard)
+@UseGuards(SessionAuthGuard)
 @Controller('rooms')
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}

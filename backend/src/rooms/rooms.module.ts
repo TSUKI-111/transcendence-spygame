@@ -5,7 +5,9 @@ import { RoomEventsPublisher } from './events/room-events.publisher.js';
 import { RoomGateway } from './room.gateway.js';
 import { ChatService } from './chat/chat.service.js';
 import { ChatGateway } from './chat/chat.gateway.js';
+import { AuthModule } from '../auth/auth.module.js';
 @Module({
+  imports: [AuthModule],
   controllers: [RoomsController],
   providers: [
     RoomsService,
