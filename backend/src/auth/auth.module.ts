@@ -17,6 +17,6 @@ import { SessionService } from './session.service.js';
     PasswordService,
     SessionService,
   ],
-  exports: [RequireUserGuard, SessionAuthGuard],
+  exports: [RequireUserGuard, SessionAuthGuard, SessionService],
 })
 export class AuthModule {}
