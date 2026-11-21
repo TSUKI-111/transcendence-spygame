@@ -66,3 +66,33 @@ export type Room = Prisma.RoomModel
  *
  */
 export type RoomPlayer = Prisma.RoomPlayerModel
+/**
+ * Model Game
+ *
+ */
+export type Game = Prisma.GameModel
+/**
+ * Model GamePlayer
+ *
+ */
+export type GamePlayer = Prisma.GamePlayerModel
+/**
+ * Model GameRound
+ *
+ */
+export type GameRound = Prisma.GameRoundModel
+/**
+ * Model Clue
+ *
+ */
+export type Clue = Prisma.ClueModel
+/**
+ * Model Vote
+ *
+ */
+export type Vote = Prisma.VoteModel
+/**
+ * Model ChatMessage
+ *
+ */
+export type ChatMessage = Prisma.ChatMessageModel
