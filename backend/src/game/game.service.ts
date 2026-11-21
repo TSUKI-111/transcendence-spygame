@@ -3,6 +3,7 @@ import {randomInt, randomUUID} from "node:crypto";
 import {PrismaService} from "../prisma/prisma.service.js";
 
 import {calculateVotingOutcome} from "./round-resolution.js";
+import {GameEventsService} from "./game-events.service.js";
 
 import type {StartGameRequest, StartGameResponse} from "./contracts/start-game.interface.ts";
 import type {GameRole, PlayerGameState} from "./contracts/player-game-state.interface.ts";
@@ -17,9 +18,10 @@ const SECRET_WORDS = ["apple", "banana", "cherry", "ocean", "mountain", "river",
 export class GameService
 {
 
-	constructor(private readonly prisma: PrismaService,)
-	{
-	}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly events: GameEventsService,
+	) {}
 
 	async startGame(request: StartGameRequest): Promise<StartGameResponse>
 	{
@@ -121,6 +123,19 @@ export class GameService
 					},
 				},
 			});
+
+			await this.events.publish(
+			{
+				name: "game.phase_changed",
+				roomId: request.roomId,
+				payload:
+				{
+					gameId,
+					phase: "CLUE_SUBMISSION",
+					roundNumber: 1,
+					phaseEndsAt: phaseEndsAt.toISOString(),
+				},
+			});
 		}
 		catch (error)
 		{
@@ -140,6 +155,7 @@ export class GameService
 			roundNumber: 1,
 			phaseEndsAt: phaseEndsAt.toISOString(),
 		};
+
 	}
 
 	async getPlayerState(gameId: string, userId: number): Promise<PlayerGameState>
@@ -263,6 +279,7 @@ export class GameService
 			},
 			select:
 			{
+				roomId: true,
 				phase: true,
 				currentRoundNumber: true,
 				phaseEndsAt: true,
@@ -399,12 +416,20 @@ export class GameService
 		}
 
 		// Return the accepted clue
-		return {
+		const acceptedClue: AcceptedClue =
+		{
 			gameId,
 			roundNumber: game.currentRoundNumber,
 			userId,
 			clue: cleanClue,
 		};
+		await this.events.publish(
+		{
+			name: "game.clue_submitted",
+			roomId: game.roomId,
+			payload: acceptedClue,
+		});
+		return acceptedClue;
 	}
 
 	async submitVote(gameId: string, voterUserId: number, targetUserId: number, nowMs: number = Date.now()): Promise<void>
@@ -555,7 +580,7 @@ export class GameService
 	
 	async resolveRound(gameId: string, nowMs: number = Date.now()): Promise<RoundResolutionResult> 
 	{
-		return this.prisma.$transaction(async tx => 
+		const resolution = await this.prisma.$transaction(async tx => 
 		{
 
 	    	// Read the game and all its original players
@@ -769,32 +794,111 @@ export class GameService
 			}
 		}
 
-			// Build the final result for M4, if terminal.
-			const finalResult: GameFinalResult | null = nextPhase === 'CLUE_SUBMISSION' ? null: 
-			{
-				gameId,
-				roomId: game.roomId,
-				status: nextPhase,
-				winner,
-				reason,
-				endedAt: endedAt.toISOString(),
-			};
-
-			return {
-				gameId,
-				roundNumber: game.currentRoundNumber,
-				outcome: result?.outcome ?? null,
-				eliminatedUserId: eliminated?.userId ?? null,
-				eliminatedRole: eliminated?.role ?? null,
-				nextPhase,
-				phaseEndsAt: nextDeadline?.toISOString() ?? null,
-				finalResult,
-			};
-
+		// Build the final result for M4, if terminal.
+		const finalResult: GameFinalResult | null = nextPhase === 'CLUE_SUBMISSION' ? null: 
+		{
+			gameId,
+			roomId: game.roomId,
+			status: nextPhase,
+			winner,
+			reason,
+			endedAt: endedAt.toISOString(),
+		};
+		return {
+			gameId,
+			roomId: game.roomId,
+			roundNumber: game.currentRoundNumber,
+			outcome: result?.outcome ?? null,
+			eliminatedUserId: eliminated?.userId ?? null,
+			eliminatedRole: eliminated?.role ?? null,
+			departedUserIds: disconnected.map(player => player.userId),
+			nextPhase,
+			phaseEndsAt: nextDeadline?.toISOString() ?? null,
+			finalResult,
+		};
 	}, 
 	{
 		isolationLevel: 'Serializable'
 	});
+
+	// Notify permanently departed players
+	for (const userId of resolution.departedUserIds)
+	{
+		await this.events.publish(
+		{
+			name: "game.player_updated",
+			roomId: resolution.roomId,
+			payload:
+			{
+				gameId,
+				userId,
+				participationStatus: "DEPARTED",
+			},
+		});
+	}
+
+	// Notify the eliminated player
+	if (resolution.eliminatedUserId !== null)
+	{
+		await this.events.publish(
+		{
+			name: "game.player_updated",
+			roomId: resolution.roomId,
+			payload:
+			{
+				gameId,
+				userId: resolution.eliminatedUserId,
+				participationStatus: "ELIMINATED",
+			},
+		});
+	}
+
+	// Announce the round result
+	if (resolution.outcome !== null)
+	{
+		await this.events.publish(
+		{
+			name: "game.round_resolved",
+			roomId: resolution.roomId,
+			payload:
+			{
+				gameId,
+				roundNumber: resolution.roundNumber,
+				outcome: resolution.outcome,
+				eliminatedUserId: resolution.eliminatedUserId,
+				eliminatedRole: resolution.eliminatedRole,
+			},
+		});
+	}
+
+	// Announce game completion or the next round
+	if (resolution.finalResult !== null)
+	{
+		await this.events.publish(
+		{
+			name: "game.ended",
+			roomId: resolution.roomId,
+			payload: resolution.finalResult,
+		});
+	}
+	else if (resolution.nextPhase === "CLUE_SUBMISSION" && resolution.phaseEndsAt !== null)
+	{
+		await this.events.publish(
+		{
+			name: "game.phase_changed",
+			roomId: resolution.roomId,
+			payload:
+			{
+				gameId,
+				phase: "CLUE_SUBMISSION",
+				roundNumber: resolution.roundNumber + 1,
+				phaseEndsAt: resolution.phaseEndsAt,
+			},
+		});
+	}
+
+	// Return the result to caller
+	return resolution;
 }
 
 	async advancePhaseIfExpired(gameId: string, nowMs: number = Date.now()): Promise<boolean>
@@ -808,6 +912,8 @@ export class GameService
 			},
 			select:
 			{
+				roomId: true,
+				currentRoundNumber: true,
 				phase: true,
 				phaseEndsAt: true,
 			},
@@ -856,8 +962,27 @@ export class GameService
 			return false;
 		}
 
-		// Update the game in PostgreSQL
-		const result = await this.prisma.game.updateMany(
+		// // Update the game in PostgreSQL
+		// const result = await this.prisma.game.updateMany(
+		// {
+		// 	where:
+		// 	{
+		// 		id: gameId,
+		// 		phase: game.phase,
+		// 		phaseEndsAt: game.phaseEndsAt,
+		// 	},
+		// 	data:
+		// 	{
+		// 		phase: nextPhase,
+		// 		phaseEndsAt: new Date(deadlineMs + durationMs),
+		// 	},
+		// });
+
+		// // Exactly one game must have been updated.
+		// return result.count === 1;
+		const nextDeadline = new Date(deadlineMs + durationMs);
+
+		const updated = await this.prisma.game.updateMany(
 		{
 			where:
 			{
@@ -868,12 +993,30 @@ export class GameService
 			data:
 			{
 				phase: nextPhase,
-				phaseEndsAt: new Date(deadlineMs + durationMs),
+				phaseEndsAt: nextDeadline,
 			},
 		});
 
-		// Exactly one game must have been updated.
-		return result.count === 1;
+		if (updated.count !== 1)
+		{
+			return false;
+		}
+
+		// The phase changed successfully in PostgreSQL.
+		await this.events.publish(
+		{
+			name: "game.phase_changed",
+			roomId: game.roomId,
+			payload:
+			{
+				gameId,
+				phase: nextPhase,
+				roundNumber: game.currentRoundNumber,
+				phaseEndsAt: nextDeadline.toISOString(),
+			},
+		});
+
+		return true;
 	}
 }
 

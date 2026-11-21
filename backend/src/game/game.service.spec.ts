@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameService } from './game.service.js';
+import { GameEventsService } from './game-events.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 describe('GameService', () => {
@@ -59,12 +60,17 @@ describe('GameService', () => {
     },
   };
 
+  const eventsMock = {
+    publish: vi.fn(),
+  };
+
 
   const dbDeadline = new Date('2030-01-01T12:00:00.000Z');
 
   // Prepare a valid game, player and round for clue tests
-  function mockClueDatabase() {
+  function mockClueDatabase(roomId = randomUUID()) {
     prismaMock.game.findUnique.mockResolvedValueOnce({
+      roomId,
       phase: 'CLUE_SUBMISSION',
       currentRoundNumber: 1,
       phaseEndsAt: dbDeadline,
@@ -198,14 +204,21 @@ describe('GameService', () => {
 
     prismaMock.vote.create.mockReset();
 
+    eventsMock.publish.mockReset();
+    eventsMock.publish.mockResolvedValue(undefined);
+
     const moduleRef = await Test.createTestingModule({
-      providers: [
-        GameService,
-        {
-          provide: PrismaService,
-          useValue: prismaMock,
-        },
-      ],
+    providers: [
+      GameService,
+      {
+        provide: PrismaService,
+        useValue: prismaMock,
+      },
+      {
+        provide: GameEventsService,
+        useValue: eventsMock,
+      },
+    ],
     }).compile();
 
     service = moduleRef.get<GameService>(GameService);
@@ -1173,6 +1186,112 @@ describe('GameService', () => {
 
     expect(txMock.gameRound.update).not.toHaveBeenCalled();
     expect(txMock.gamePlayer.update).not.toHaveBeenCalled();
+  });
+
+
+
+  it('publishes the first phase after game creation', async () => {
+    const roomId = randomUUID();
+
+    const result = await service.startGame({
+      roomId,
+      participantIds: [1, 2, 3],
+    });
+
+    expect(eventsMock.publish).toHaveBeenCalledWith({
+      name: 'game.phase_changed',
+      roomId,
+      payload: {
+        gameId: result.gameId,
+        phase: 'CLUE_SUBMISSION',
+        roundNumber: 1,
+        phaseEndsAt: result.phaseEndsAt,
+      },
+    });
+  });
+
+  it('publishes accepted clues without revealing the word', async () => {
+    const roomId = randomUUID();
+    const gameId = randomUUID();
+
+    mockClueDatabase(roomId);
+
+    await service.submitClue(
+      gameId,
+      1,
+      '  Beach  ',
+      dbDeadline.getTime() - 1000,
+    );
+
+    expect(eventsMock.publish).toHaveBeenCalledWith({
+      name: 'game.clue_submitted',
+      roomId,
+      payload: {
+        gameId,
+        roundNumber: 1,
+        userId: 1,
+        clue: 'Beach',
+      },
+    });
+
+    const event = eventsMock.publish.mock.calls[0][0];
+    expect(event.payload).not.toHaveProperty('secretWord');
+  });
+
+  it('does not publish a phase change when update fails', async () => {
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      roomId: randomUUID(),
+      phase: 'CLUE_SUBMISSION',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+    });
+
+    prismaMock.game.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+
+    const changed = await service.advancePhaseIfExpired(
+      randomUUID(),
+      dbDeadline.getTime(),
+    );
+
+    expect(changed).toBe(false);
+    expect(eventsMock.publish).not.toHaveBeenCalled();
+  });
+
+  it('publishes round resolution and the final result', async () => {
+    const { gameId, roomId } =
+      mockRoundResolution([11, 11, 12]);
+
+    await service.resolveRound(
+      gameId,
+      dbDeadline.getTime(),
+    );
+
+    expect(eventsMock.publish).toHaveBeenCalledWith({
+      name: 'game.round_resolved',
+      roomId,
+      payload: {
+        gameId,
+        roundNumber: 1,
+        outcome: 'ELIMINATED',
+        eliminatedUserId: 1,
+        eliminatedRole: 'SPY',
+      },
+    });
+
+    expect(eventsMock.publish).toHaveBeenCalledWith({
+      name: 'game.ended',
+      roomId,
+      payload: {
+        gameId,
+        roomId,
+        status: 'FINISHED',
+        winner: 'DETECTIVES',
+        reason: null,
+        endedAt: dbDeadline.toISOString(),
+      },
+    });
   });
 
 
