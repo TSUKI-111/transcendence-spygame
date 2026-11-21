@@ -51,6 +51,7 @@ describe('GameService', () => {
     },
 
     gamePlayer: {
+	  findUnique: vi.fn(),
       updateMany: vi.fn(),
       update: vi.fn(),
     },
@@ -186,6 +187,32 @@ describe('GameService', () => {
   }
 
 
+  function mockConnectionDatabase(
+    currentStatus: 'CONNECTED' | 'DISCONNECTED',
+    phase: 'DISCUSSION' | 'VOTING' = 'DISCUSSION',
+  ) {
+    const roomId = randomUUID();
+
+    txMock.game.findUnique.mockResolvedValueOnce({
+      roomId,
+      phase,
+      phaseEndsAt: dbDeadline,
+    });
+
+    txMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'ACTIVE',
+      connectionStatus: currentStatus,
+    });
+
+    txMock.gamePlayer.updateMany.mockResolvedValueOnce({
+      count: 1,
+    });
+
+    return roomId;
+  }
+
+
   beforeEach(async () => {
     // Reset mock state before every test
     prismaMock.game.findUnique.mockReset();
@@ -206,6 +233,8 @@ describe('GameService', () => {
 
     eventsMock.publish.mockReset();
     eventsMock.publish.mockResolvedValue(undefined);
+
+	txMock.gamePlayer.findUnique.mockReset();
 
     const moduleRef = await Test.createTestingModule({
     providers: [
@@ -742,7 +771,7 @@ describe('GameService', () => {
     expect(prismaMock.game.updateMany).not.toHaveBeenCalled();
   });
 
-  
+
   it('resolves voting when its deadline expires', async () => {
     const { gameId } = mockRoundResolution([11, 11, 12]);
 
@@ -1293,6 +1322,457 @@ describe('GameService', () => {
       },
     });
   });
+
+
+  // ==========================================
+  // 7. CONNECTION MANAGEMENT
+  // ==========================================
+
+  it('marks an active player as disconnected', async () => {
+    const gameId = randomUUID();
+    const roomId = mockConnectionDatabase('CONNECTED');
+
+    await service.markDisconnected(gameId, 1);
+
+    expect(txMock.gamePlayer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 77,
+        gameId,
+        participationStatus: 'ACTIVE',
+        connectionStatus: 'CONNECTED',
+      },
+      data: {
+        connectionStatus: 'DISCONNECTED',
+      },
+    });
+
+    expect(eventsMock.publish).toHaveBeenCalledWith({
+      name: 'game.player_updated',
+      roomId,
+      payload: {
+        gameId,
+        userId: 1,
+        connectionStatus: 'DISCONNECTED',
+      },
+    });
+
+    expect(eventsMock.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconnects a player and restores their private state', async () => {
+    const gameId = randomUUID();
+    const roomId = mockConnectionDatabase('DISCONNECTED');
+
+    // The existing getPlayerState() is tested separately.
+    const privateState = {
+      gameId,
+      role: 'DETECTIVE',
+      secretWord: 'Ocean',
+    } as Awaited<ReturnType<GameService['getPlayerState']>>;
+
+    const stateMethod = vi.spyOn(service, 'getPlayerState')
+      .mockResolvedValueOnce(privateState);
+
+    const result = await service.reconnectPlayer(gameId, 1);
+
+    expect(stateMethod).toHaveBeenCalledWith(gameId, 1);
+    expect(result).toEqual(privateState);
+
+    expect(eventsMock.publish).toHaveBeenCalledWith({
+      name: 'game.player_updated',
+      roomId,
+      payload: {
+        gameId,
+        userId: 1,
+        connectionStatus: 'CONNECTED',
+      },
+    });
+
+    // The public event does not reveal the secret word.
+    expect(eventsMock.publish.mock.calls[0][0].payload)
+      .not.toHaveProperty('secretWord');
+  });
+
+  it('does not publish duplicate disconnection events', async () => {
+    mockConnectionDatabase('DISCONNECTED');
+
+    await service.markDisconnected(randomUUID(), 1);
+
+    expect(txMock.gamePlayer.updateMany)
+      .not.toHaveBeenCalled();
+
+    expect(eventsMock.publish).not.toHaveBeenCalled();
+  });
+
+  it('rejects a player who does not belong to the game', async () => {
+    mockConnectionDatabase('CONNECTED');
+
+    txMock.gamePlayer.findUnique.mockReset();
+    txMock.gamePlayer.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      service.markDisconnected(randomUUID(), 99)
+    ).rejects.toThrow('NOT_GAME_PARTICIPANT');
+
+    expect(eventsMock.publish).not.toHaveBeenCalled();
+  });
+
+  it('rejects reconnection after permanent departure', async () => {
+    mockConnectionDatabase('DISCONNECTED');
+
+    txMock.gamePlayer.findUnique.mockReset();
+    txMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      participationStatus: 'DEPARTED',
+      connectionStatus: 'DISCONNECTED',
+    });
+
+    await expect(
+      service.reconnectPlayer(randomUUID(), 1)
+    ).rejects.toThrow('PLAYER_NOT_ACTIVE');
+
+    expect(txMock.gamePlayer.updateMany)
+      .not.toHaveBeenCalled();
+  });
+
+  it('rejects reconnection after the voting deadline', async () => {
+    mockConnectionDatabase('DISCONNECTED', 'VOTING');
+
+    await expect(
+      service.reconnectPlayer(
+        randomUUID(),
+        1,
+        dbDeadline.getTime(),
+      )
+    ).rejects.toThrow('ROUND_CLOSING');
+
+    expect(txMock.gamePlayer.updateMany)
+      .not.toHaveBeenCalled();
+  });
+
+  it('rejects connection changes after the game ends', async () => {
+    txMock.game.findUnique.mockResolvedValueOnce({
+      roomId: randomUUID(),
+      phase: 'FINISHED',
+      phaseEndsAt: null,
+    });
+
+    await expect(
+      service.markDisconnected(randomUUID(), 1)
+    ).rejects.toThrow('GAME_NOT_ACTIVE');
+
+    expect(txMock.gamePlayer.updateMany)
+      .not.toHaveBeenCalled();
+  });
+
+  it('does not publish an event if the database update fails', async () => {
+    mockConnectionDatabase('CONNECTED');
+
+    txMock.gamePlayer.updateMany.mockReset();
+    txMock.gamePlayer.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+
+    await expect(
+      service.markDisconnected(randomUUID(), 1)
+    ).rejects.toThrow('CONNECTION_STATE_CHANGED');
+
+    expect(eventsMock.publish).not.toHaveBeenCalled();
+  });
+
+
+// ==========================================
+// PART 13B — TEST HELPERS
+// ==========================================
+
+const leavePlayers4 = [
+  ...players3,
+  {
+    id: 14,
+    userId: 4,
+    role: 'DETECTIVE',
+    participationStatus: 'ACTIVE',
+    connectionStatus: 'CONNECTED',
+  },
+];
+
+function mockLeaveDatabase(
+  players = players3,
+  phase:
+    | 'DISCUSSION'
+    | 'FINISHED'
+    | 'TERMINATED' = 'DISCUSSION',
+) {
+  const gameId = randomUUID();
+  const roomId = randomUUID();
+
+  txMock.game.findUnique.mockResolvedValueOnce({
+    roomId,
+    phase,
+    players,
+  });
+
+  txMock.gamePlayer.updateMany.mockResolvedValueOnce({
+    count: 1,
+  });
+
+  txMock.game.updateMany.mockResolvedValueOnce({
+    count: 1,
+  });
+
+  return { gameId, roomId };
+}
+
+
+// ==========================================
+// 8. INTENTIONAL LEAVING
+// ==========================================
+
+it('terminates immediately when the Spy leaves', async () => {
+  const { gameId, roomId } = mockLeaveDatabase();
+
+  const result = await service.leaveGame(
+    gameId,
+    1, // Spy
+    dbDeadline.getTime(),
+  );
+
+  expect(result.changed).toBe(true);
+
+  expect(result.finalResult).toEqual({
+    gameId,
+    roomId,
+    status: 'TERMINATED',
+    winner: null,
+    reason: 'SPY_DEPARTED',
+    endedAt: dbDeadline.toISOString(),
+  });
+
+  expect(txMock.gamePlayer.updateMany)
+    .toHaveBeenCalledWith({
+      where: {
+        id: 11,
+        gameId,
+        participationStatus: 'ACTIVE',
+      },
+      data: {
+        participationStatus: 'DEPARTED',
+      },
+    });
+
+  expect(txMock.game.updateMany)
+    .toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          phase: 'TERMINATED',
+          terminationReason: 'SPY_DEPARTED',
+          winner: null,
+          phaseEndsAt: null,
+        }),
+      }),
+    );
+
+  expect(eventsMock.publish).toHaveBeenNthCalledWith(
+    1,
+    {
+      name: 'game.player_updated',
+      roomId,
+      payload: {
+        gameId,
+        userId: 1,
+        participationStatus: 'DEPARTED',
+      },
+    },
+  );
+
+  expect(eventsMock.publish).toHaveBeenNthCalledWith(
+    2,
+    {
+      name: 'game.ended',
+      roomId,
+      payload: result.finalResult,
+    },
+  );
+});
+
+it('terminates when a Detective leaves a 3-player game', async () => {
+  const { gameId } = mockLeaveDatabase();
+
+  const result = await service.leaveGame(
+    gameId,
+    2,
+    dbDeadline.getTime(),
+  );
+
+  expect(result.finalResult?.status).toBe('TERMINATED');
+  expect(result.finalResult?.winner).toBeNull();
+  expect(result.finalResult?.reason)
+    .toBe('INSUFFICIENT_PLAYERS');
+
+  expect(eventsMock.publish).toHaveBeenCalledTimes(2);
+});
+
+it('continues when a Detective leaves a 4-player game', async () => {
+  const { gameId, roomId } =
+    mockLeaveDatabase(leavePlayers4);
+
+  const result = await service.leaveGame(
+    gameId,
+    2,
+    dbDeadline.getTime(),
+  );
+
+  expect(result.changed).toBe(true);
+  expect(result.finalResult).toBeNull();
+
+  expect(txMock.game.updateMany)
+    .not.toHaveBeenCalled();
+
+  expect(eventsMock.publish).toHaveBeenCalledTimes(1);
+
+  expect(eventsMock.publish).toHaveBeenCalledWith({
+    name: 'game.player_updated',
+    roomId,
+    payload: {
+      gameId,
+      userId: 2,
+      participationStatus: 'DEPARTED',
+    },
+  });
+});
+
+it('does not count temporary disconnection as departure', async () => {
+  const players = leavePlayers4.map(player =>
+    player.id === 13
+      ? {
+          ...player,
+          connectionStatus: 'DISCONNECTED',
+        }
+      : player
+  );
+
+  const { gameId } = mockLeaveDatabase(players);
+
+  const result = await service.leaveGame(
+    gameId,
+    2,
+    dbDeadline.getTime(),
+  );
+
+  // Three players remain ACTIVE, including the
+  // temporarily disconnected player.
+  expect(result.finalResult).toBeNull();
+  expect(txMock.game.updateMany).not.toHaveBeenCalled();
+});
+
+it('ignores repeated leave requests after termination', async () => {
+  const players = players3.map(player =>
+    player.id === 11
+      ? { ...player, participationStatus: 'DEPARTED' }
+      : player
+  );
+
+  const { gameId } = mockLeaveDatabase(
+    players,
+    'TERMINATED',
+  );
+
+  const result = await service.leaveGame(gameId, 1);
+
+  expect(result.changed).toBe(false);
+  expect(result.finalResult).toBeNull();
+
+  expect(txMock.gamePlayer.updateMany)
+    .not.toHaveBeenCalled();
+
+  expect(eventsMock.publish)
+    .not.toHaveBeenCalled();
+});
+
+it('rejects leaving by an eliminated player', async () => {
+  const players = players3.map(player =>
+    player.id === 12
+      ? {
+          ...player,
+          participationStatus: 'ELIMINATED',
+        }
+      : player
+  );
+
+  const { gameId } = mockLeaveDatabase(players);
+
+  await expect(
+    service.leaveGame(gameId, 2),
+  ).rejects.toThrow('PLAYER_NOT_ACTIVE');
+
+  expect(eventsMock.publish).not.toHaveBeenCalled();
+});
+
+it('rejects a user outside the game', async () => {
+  const { gameId } = mockLeaveDatabase();
+
+  await expect(
+    service.leaveGame(gameId, 999),
+  ).rejects.toThrow('NOT_GAME_PARTICIPANT');
+
+  expect(txMock.gamePlayer.updateMany)
+    .not.toHaveBeenCalled();
+});
+
+it('rejects leaving after the game has finished', async () => {
+  const { gameId } = mockLeaveDatabase(
+    players3,
+    'FINISHED',
+  );
+
+  await expect(
+    service.leaveGame(gameId, 1),
+  ).rejects.toThrow('GAME_NOT_ACTIVE');
+
+  expect(eventsMock.publish).not.toHaveBeenCalled();
+});
+
+it('rejects leaving an unknown game', async () => {
+  txMock.game.findUnique.mockResolvedValueOnce(null);
+
+  await expect(
+    service.leaveGame(randomUUID(), 1),
+  ).rejects.toThrow('GAME_NOT_FOUND');
+
+  expect(eventsMock.publish).not.toHaveBeenCalled();
+});
+
+it('does not publish when the player update fails', async () => {
+  const { gameId } = mockLeaveDatabase();
+
+  txMock.gamePlayer.updateMany.mockReset();
+  txMock.gamePlayer.updateMany.mockResolvedValueOnce({
+    count: 0,
+  });
+
+  await expect(
+    service.leaveGame(gameId, 1),
+  ).rejects.toThrow('PLAYER_STATE_CHANGED');
+
+  expect(txMock.game.updateMany).not.toHaveBeenCalled();
+  expect(eventsMock.publish).not.toHaveBeenCalled();
+});
+
+it('does not publish when game termination fails', async () => {
+  const { gameId } = mockLeaveDatabase();
+
+  txMock.game.updateMany.mockReset();
+  txMock.game.updateMany.mockResolvedValueOnce({
+    count: 0,
+  });
+
+  await expect(
+    service.leaveGame(gameId, 1),
+  ).rejects.toThrow('GAME_STATE_CHANGED');
+
+  expect(eventsMock.publish).not.toHaveBeenCalled();
+});
+
 
 
 });

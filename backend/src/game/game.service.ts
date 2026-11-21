@@ -10,6 +10,7 @@ import type {GameRole, PlayerGameState} from "./contracts/player-game-state.inte
 import type {AcceptedClue} from "./contracts/clue.interface.ts";
 import type {RoundResolutionResult} from "./contracts/round-resolution.interface.ts";
 import type {GameFinalResult} from "./contracts/game-final-result.interface.ts";
+import type {LeaveGameResult} from "./contracts/leave-game-result.interface.ts";
 
 // Predefined backend word list for the game
 const SECRET_WORDS = ["apple", "banana", "cherry", "ocean", "mountain", "river", "forest", "desert", "city", "village", "pizza", "pasta", "burger"];
@@ -64,7 +65,7 @@ export class GameService
 		// Assign roles
 		const spyIndex = randomInt(ids.length);
 
-		const players: 
+		const players:
 		{
 			userId: number;
 			role: GameRole;
@@ -76,7 +77,7 @@ export class GameService
 		// Prepare initial values
 		const gameId = randomUUID();
 		const startedAt = new Date();
-		const phaseEndsAt = new Date(startedAt.getTime() + 60_000); 
+		const phaseEndsAt = new Date(startedAt.getTime() + 60_000);
 
 		// Store the game temporarily
 		try
@@ -186,7 +187,7 @@ export class GameService
 		{
 			where:
 			{
-				gameId_userId: 
+				gameId_userId:
 				{
 					gameId,
 					userId,
@@ -197,7 +198,7 @@ export class GameService
 				role: true,
 			},
 		});
-	
+
 		if (!player)
 		{
 			throw new Error("NOT_GAME_PARTICIPANT");
@@ -221,7 +222,7 @@ export class GameService
 					select:
 					{
 						text: true,
-						author: 
+						author:
 						{
 							select:
 							{
@@ -264,7 +265,7 @@ export class GameService
 		{
 			state.secretWord = game.secretWord;
 		}
-		
+
 		return state;
 	}
 
@@ -296,7 +297,7 @@ export class GameService
 		{
 			where:
 			{
-				gameId_userId : 
+				gameId_userId :
 				{
 					gameId,
 					userId
@@ -354,7 +355,7 @@ export class GameService
 		{
 			where:
 			{
-				gameId_number: 
+				gameId_number:
 				{
 					gameId,
 					number: game.currentRoundNumber,
@@ -477,7 +478,7 @@ export class GameService
 		{
 			where:
 			{
-				gameId_userId : 
+				gameId_userId :
 				{
 					gameId,
 					userId: voterUserId,
@@ -490,7 +491,7 @@ export class GameService
 				connectionStatus: true,
 			},
 		});
-		
+
 		if (!voter)
 		{
 			throw new Error("NOT_GAME_PARTICIPANT");
@@ -507,7 +508,7 @@ export class GameService
 		{
 			where:
 			{
-				gameId_userId : 
+				gameId_userId :
 				{
 					gameId,
 					userId: targetUserId,
@@ -525,7 +526,7 @@ export class GameService
 		{
 			where:
 			{
-				gameId_number: 
+				gameId_number:
 				{
 					gameId,
 					number: game.currentRoundNumber,
@@ -542,12 +543,12 @@ export class GameService
 			throw new Error("ROUND_NOT_FOUND");
 		}
 
-		if (!target) 
+		if (!target)
 		{
 			throw new Error('INVALID_VOTE_TARGET');
 		}
 
-		if (target.participationStatus !== 'ACTIVE') 
+		if (target.participationStatus !== 'ACTIVE')
 		{
 			throw new Error('INVALID_VOTE_TARGET');
 		}
@@ -577,28 +578,28 @@ export class GameService
 		}
 	}
 
-	
-	async resolveRound(gameId: string, nowMs: number = Date.now()): Promise<RoundResolutionResult> 
+
+	async resolveRound(gameId: string, nowMs: number = Date.now()): Promise<RoundResolutionResult>
 	{
-		const resolution = await this.prisma.$transaction(async tx => 
+		const resolution = await this.prisma.$transaction(async tx =>
 		{
 
-	    	// Read the game and all its original players
+			// Read the game and all its original players
 			const game = await tx.game.findUnique(
 			{
-				where: 
-				{ 
-					id: gameId 
+				where:
+				{
+					id: gameId
 				},
-				select: 
+				select:
 				{
 					roomId: true,
 					phase: true,
 					currentRoundNumber: true,
 					phaseEndsAt: true,
-					players: 
+					players:
 					{
-						select: 
+						select:
 						{
 							id: true,
 							userId: true,
@@ -609,74 +610,74 @@ export class GameService
 					},
 				},
 			});
-			if (!game) 
+			if (!game)
 			{
 				throw new Error('GAME_NOT_FOUND');
 			}
 
-			if (game.phase !== 'VOTING') 
+			if (game.phase !== 'VOTING')
 			{
 				throw new Error('INVALID_PHASE');
 			}
 
-			if (game.phaseEndsAt === null || nowMs < game.phaseEndsAt.getTime()) 
+			if (game.phaseEndsAt === null || nowMs < game.phaseEndsAt.getTime())
 			{
 				throw new Error('PHASE_NOT_EXPIRED');
 			}
 
-	    	// Read the current round
+			// Read the current round
 			const round = await tx.gameRound.findUnique(
 			{
-				where: 
+				where:
 				{
-					gameId_number: 
+					gameId_number:
 					{
 						gameId,
 						number: game.currentRoundNumber,
 					},
 				},
-				select: 
-				{ 
-					id: true 
+				select:
+				{
+					id: true
 				},
 			});
-			
-			if (!round) 
+
+			if (!round)
 			{
 				throw new Error('ROUND_NOT_FOUND');
 			}
 
-	    	// Read all votes from this round
+			// Read all votes from this round
 			const votes = await tx.vote.findMany(
 			{
-				where: 
-				{ 
-					roundId: round.id 
+				where:
+				{
+					roundId: round.id
 				},
-				select: 
+				select:
 				{
 					targetGamePlayerId: true,
 				},
 			});
 
-	    	// Players disconnected at resolution depart.
+			// Players disconnected at resolution depart.
 			const disconnected = game.players.filter(player => player.participationStatus === 'ACTIVE' && player.connectionStatus === 'DISCONNECTED');
 
 			const activePlayers = game.players.filter(player => player.participationStatus === 'ACTIVE' && player.connectionStatus === 'CONNECTED');
 
-	    	// Departures may terminate the game.
+			// Departures may terminate the game.
 			let reason: GameFinalResult['reason'] = null;
 
-			if (disconnected.some(player => player.role === 'SPY')) 
+			if (disconnected.some(player => player.role === 'SPY'))
 			{
 				reason = 'SPY_DEPARTED';
-			} 
-			else if (activePlayers.length <= 2) 
+			}
+			else if (activePlayers.length <= 2)
 			{
 				reason = 'INSUFFICIENT_PLAYERS';
 			}
 
-		    // 6. Count votes only if the game can continue.
+			// 6. Count votes only if the game can continue.
 			const result = reason === null ? calculateVotingOutcome(activePlayers, votes) : null;
 
 			const eliminated = result?.eliminated ?? null;
@@ -684,36 +685,36 @@ export class GameService
 			// 7. Determine the winner, if any.
 			let winner: GameFinalResult['winner'] = null;
 
-			if (reason === null && eliminated) 
+			if (reason === null && eliminated)
 			{
-				if (eliminated.role === 'SPY') 
+				if (eliminated.role === 'SPY')
 				{
 					winner = 'DETECTIVES';
 				}
-				else if (activePlayers.length - 1 <= 2) 
+				else if (activePlayers.length - 1 <= 2)
 				{
 					winner = 'SPY';
 				}
 			}
 
-	    	// Choose the next game phase.
+			// Choose the next game phase.
 			const nextPhase: 'CLUE_SUBMISSION' | 'FINISHED' | 'TERMINATED' = reason !== null ? 'TERMINATED' : winner !== null ? 'FINISHED' : 'CLUE_SUBMISSION';
 
 			const endedAt = new Date(nowMs);
 
-	   			// A new round starts with a fresh 60-second deadline.
-					const nextDeadline = nextPhase === 'CLUE_SUBMISSION' ? new Date(nowMs + 60_000) : null;
+			// A new round starts with a fresh 60-second deadline.
+			const nextDeadline = nextPhase === 'CLUE_SUBMISSION' ? new Date(nowMs + 60_000) : null;
 
-	    	// Claim this round resolution.
+			// Claim this round resolution.
 			const updated = await tx.game.updateMany(
 			{
-				where: 
+				where:
 				{
 					id: gameId,
 					phase: 'VOTING',
 					phaseEndsAt: game.phaseEndsAt,
 				},
-				data: 
+				data:
 				{
 					phase: nextPhase,
 					currentRoundNumber:
@@ -725,109 +726,493 @@ export class GameService
 				},
 			});
 
-			if (updated.count !== 1) 
+			if (updated.count !== 1)
 			{
 				throw new Error('ROUND_ALREADY_RESOLVED');
 			}
 
-	    // Permanently remove disconnected participants from gameplay, but keep their historical records.
-		if (disconnected.length > 0) 
-		{
-			await tx.gamePlayer.updateMany(
+			// Permanently remove disconnected participants from gameplay, but keep their historical records.
+			if (disconnected.length > 0)
 			{
-				where: 
+				await tx.gamePlayer.updateMany(
 				{
-					gameId,
-					participationStatus: 'ACTIVE',
-					connectionStatus: 'DISCONNECTED',
-				},
-				data: 
-				{
-					participationStatus: 'DEPARTED',
-				},
-			});
-		}
-
-	    // Save the voting outcome. If the game terminated due to departures, the round remains unresolved.
-		if (reason === null && result) 
-		{
-			await tx.gameRound.update(
-			{
-				where: 
-				{ 
-					id: round.id 
-				},
-				data: 
-				{
-					outcome: result.outcome,
-					eliminatedGamePlayerId: eliminated?.id ?? null,
-					resolvedAt: endedAt,
-				},
-			});
-
-			if (eliminated) 
-			{
-				await tx.gamePlayer.update(
-				{
-					where: 
-					{
-						id: eliminated.id 
-					},
-					data: 
-					{
-						participationStatus: 'ELIMINATED',
-					},
-				});
-			}
-
-	      	// Create Round 2, Round 3, etc.
-			if (nextPhase === 'CLUE_SUBMISSION') 
-			{
-				await tx.gameRound.create(
-				{
-					data: 
+					where:
 					{
 						gameId,
-						number: game.currentRoundNumber + 1,
+						participationStatus: 'ACTIVE',
+						connectionStatus: 'DISCONNECTED',
+					},
+					data:
+					{
+						participationStatus: 'DEPARTED',
 					},
 				});
 			}
+
+			// Save the voting outcome. If the game terminated due to departures, the round remains unresolved.
+			if (reason === null && result)
+			{
+				await tx.gameRound.update(
+				{
+					where:
+					{
+						id: round.id
+					},
+					data:
+					{
+						outcome: result.outcome,
+						eliminatedGamePlayerId: eliminated?.id ?? null,
+						resolvedAt: endedAt,
+					},
+				});
+
+				if (eliminated)
+				{
+					await tx.gamePlayer.update(
+					{
+						where:
+						{
+							id: eliminated.id
+						},
+						data:
+						{
+							participationStatus: 'ELIMINATED',
+						},
+					});
+				}
+
+				// Create Round 2, Round 3, etc.
+				if (nextPhase === 'CLUE_SUBMISSION')
+				{
+					await tx.gameRound.create(
+					{
+						data:
+						{
+							gameId,
+							number: game.currentRoundNumber + 1,
+						},
+					});
+				}
+			}
+
+			// Build the final result for M4, if terminal.
+			const finalResult: GameFinalResult | null = nextPhase === 'CLUE_SUBMISSION' ? null:
+			{
+				gameId,
+				roomId: game.roomId,
+				status: nextPhase,
+				winner,
+				reason,
+				endedAt: endedAt.toISOString(),
+			};
+			return {
+				gameId,
+				roomId: game.roomId,
+				roundNumber: game.currentRoundNumber,
+				outcome: result?.outcome ?? null,
+				eliminatedUserId: eliminated?.userId ?? null,
+				eliminatedRole: eliminated?.role ?? null,
+				departedUserIds: disconnected.map(player => player.userId),
+				nextPhase,
+				phaseEndsAt: nextDeadline?.toISOString() ?? null,
+				finalResult,
+			};
+		},
+		{
+			isolationLevel: 'Serializable'
+		});
+
+		// Notify permanently departed players
+		for (const userId of resolution.departedUserIds)
+		{
+			await this.events.publish(
+			{
+				name: "game.player_updated",
+				roomId: resolution.roomId,
+				payload:
+				{
+					gameId,
+					userId,
+					participationStatus: "DEPARTED",
+				},
+			});
 		}
 
-		// Build the final result for M4, if terminal.
-		const finalResult: GameFinalResult | null = nextPhase === 'CLUE_SUBMISSION' ? null: 
+		// Notify the eliminated player
+		if (resolution.eliminatedUserId !== null)
 		{
-			gameId,
-			roomId: game.roomId,
-			status: nextPhase,
-			winner,
-			reason,
-			endedAt: endedAt.toISOString(),
-		};
-		return {
-			gameId,
-			roomId: game.roomId,
-			roundNumber: game.currentRoundNumber,
-			outcome: result?.outcome ?? null,
-			eliminatedUserId: eliminated?.userId ?? null,
-			eliminatedRole: eliminated?.role ?? null,
-			departedUserIds: disconnected.map(player => player.userId),
-			nextPhase,
-			phaseEndsAt: nextDeadline?.toISOString() ?? null,
-			finalResult,
-		};
-	}, 
-	{
-		isolationLevel: 'Serializable'
-	});
+			await this.events.publish(
+			{
+				name: "game.player_updated",
+				roomId: resolution.roomId,
+				payload:
+				{
+					gameId,
+					userId: resolution.eliminatedUserId,
+					participationStatus: "ELIMINATED",
+				},
+			});
+		}
 
-	// Notify permanently departed players
-	for (const userId of resolution.departedUserIds)
+		// Announce the round result
+		if (resolution.outcome !== null)
+		{
+			await this.events.publish(
+			{
+				name: "game.round_resolved",
+				roomId: resolution.roomId,
+				payload:
+				{
+					gameId,
+					roundNumber: resolution.roundNumber,
+					outcome: resolution.outcome,
+					eliminatedUserId: resolution.eliminatedUserId,
+					eliminatedRole: resolution.eliminatedRole,
+				},
+			});
+		}
+
+		// Announce game completion or the next round
+		if (resolution.finalResult !== null)
+		{
+			await this.events.publish(
+			{
+				name: "game.ended",
+				roomId: resolution.roomId,
+				payload: resolution.finalResult,
+			});
+		}
+		else if (resolution.nextPhase === "CLUE_SUBMISSION" && resolution.phaseEndsAt !== null)
+		{
+			await this.events.publish(
+			{
+				name: "game.phase_changed",
+				roomId: resolution.roomId,
+				payload:
+				{
+					gameId,
+					phase: "CLUE_SUBMISSION",
+					roundNumber: resolution.roundNumber + 1,
+					phaseEndsAt: resolution.phaseEndsAt,
+				},
+			});
+		}
+
+		// Return the result to caller
+		return resolution;
+	}
+
+	private async updateConnectionStatus(gameId: string, userId: number, newStatus: "CONNECTED" | "DISCONNECTED", nowMs: number = Date.now()): Promise<void>
 	{
+		// Validate input
+		if (typeof gameId !== "string" || gameId.trim() === "" || !Number.isSafeInteger(userId) || userId <= 0)
+		{
+			throw new Error("INVALID_PLAYER_REQUEST");
+		}
+
+		// Make the change in a database transaction
+		const result = await this.prisma.$transaction(
+			async tx =>
+			{
+				const game = await tx.game.findUnique(
+				{
+					where:
+					{
+						id: gameId,
+					},
+					select:
+					{
+						roomId: true,
+						phase: true,
+						phaseEndsAt: true,
+					},
+				});
+
+				if (!game)
+				{
+					throw new Error("GAME_NOT_FOUND");
+				}
+
+				if (game.phase === "FINISHED" || game.phase === "TERMINATED")
+				{
+					throw new Error("GAME_NOT_ACTIVE");
+				}
+
+				// Find this participant within this specific game
+				const player = await tx.gamePlayer.findUnique(
+				{
+					where:
+					{
+						gameId_userId:
+						{
+							gameId,
+							userId,
+						},
+					},
+					select:
+					{
+						id: true,
+						participationStatus: true,
+						connectionStatus: true,
+					},
+				});
+
+				if (!player)
+				{
+					throw new Error("NOT_GAME_PARTICIPANT");
+				}
+
+				// ELIMINATED or DEPARTED players cannot rejoin active gameplay
+				if (player.participationStatus !== "ACTIVE")
+				{
+					throw new Error("PLAYER_NOT_ACTIVE");
+				}
+
+				// The round is closing. Don't apply a late connection update to an expired voting round
+				if (game.phase === "VOTING" && (game.phaseEndsAt === null || nowMs >= game.phaseEndsAt.getTime()))
+				{
+					throw new Error("ROUND_CLOSING");
+				}
+
+				// Repeated updates are harmless
+				if (player.connectionStatus === newStatus)
+				{
+					return {
+						roomId: game.roomId,
+						changed: false
+					};
+				}
+
+				// Update only if the player still has the status we read earlier
+				const updated = await tx.gamePlayer.updateMany(
+				{
+					where:
+					{
+						id: player.id,
+						gameId,
+						participationStatus: "ACTIVE",
+						connectionStatus: player.connectionStatus,
+					},
+					data:
+					{
+						connectionStatus: newStatus,
+					}
+				});
+
+				if (updated.count !== 1)
+				{
+					throw new Error("CONNECTION_STATE_CHANGED");
+				}
+
+				return {
+					roomId: game.roomId,
+					changed: true
+				};
+			},
+			{
+				isolationLevel: "Serializable",
+			}
+		);
+
+		// Publish only AFTER the transaction commits
+		if (result.changed)
+		{
+			await this.events.publish(
+			{
+				name: "game.player_updated",
+				roomId: result.roomId,
+				payload:
+				{
+					gameId,
+					userId,
+					connectionStatus: newStatus,
+				},
+			});
+		}
+	}
+
+	// Called when a participant loses their connection
+	async markDisconnected(gameId: string, userId: number, nowMs: number = Date.now()): Promise<void>
+	{
+		await this.updateConnectionStatus(gameId, userId, "DISCONNECTED", nowMs);
+	}
+
+	// Called when a participant reconnects
+	async reconnectPlayer(gameId: string, userId: number, nowMs: number = Date.now())
+	{
+		await this.updateConnectionStatus(gameId, userId, "CONNECTED", nowMs);
+		return this.getPlayerState(gameId, userId);
+	}
+
+	async leaveGame(gameId: string, userId: number, nowMs: number = Date.now()): Promise<LeaveGameResult>
+	{
+		// Validate input
+		if (typeof gameId !== "string" || gameId.trim() === "" || !Number.isSafeInteger(userId) || userId <= 0 || !Number.isFinite(nowMs) || Number.isNaN(new Date(nowMs).getTime()))
+		{
+			throw new Error("INVALID_PLAYER_REQUEST");
+		}
+
+		// Save the departure and possible game termination together in a database transaction
+		const result = await this.prisma.$transaction(async tx =>
+		{
+			const game = await tx.game.findUnique(
+			{
+				where:
+				{
+					id: gameId,
+				},
+				select:
+				{
+					roomId: true,
+					phase: true,
+					players:
+					{
+						select:
+						{
+							id: true,
+							userId: true,
+							role: true,
+							participationStatus: true,
+						},
+					},
+				},
+			});
+
+			if (!game)
+			{
+				throw new Error("GAME_NOT_FOUND");
+			}
+
+			// Find the leaving player in this game
+			const player = game.players.find(participant => participant.userId === userId);
+
+			if (!player)
+			{
+				throw new Error("NOT_GAME_PARTICIPANT");
+			}
+
+			// Repeated departure requests are harmless, even if the first departure ended the game.
+			if (player.participationStatus === "DEPARTED")
+			{
+				return {
+					gameId,
+					roomId: game.roomId,
+					departedUserId: userId,
+					changed: false,
+					finalResult: null,
+				};
+			}
+
+			// Don't modify completed games
+			if (game.phase === "FINISHED" || game.phase === "TERMINATED")
+			{
+				throw new Error("GAME_NOT_ACTIVE");
+			}
+
+			if (player.participationStatus !== "ACTIVE")
+			{
+				throw new Error("PLAYER_NOT_ACTIVE");
+			}
+
+			// Mark the player as permanently departed
+			const updatedPlayer = await tx.gamePlayer.updateMany(
+			{
+				where:
+				{
+					id: player.id,
+					gameId,
+					participationStatus: "ACTIVE",
+				},
+				data:
+				{
+					participationStatus: "DEPARTED",
+				},
+			});
+
+			if (updatedPlayer.count !== 1)
+			{
+				throw new Error("PLAYER_STATE_CHANGED");
+			}
+
+			// Count the players remaining after departure. Temporarily disconnected players are still ACTIVE until round resolution
+			const remainingPlayers = game.players.filter(participant => participant.participationStatus === "ACTIVE" && participant.id !== player.id);
+
+			// Decide whether the game must terminate
+			let reason: GameFinalResult['reason'] = null;
+
+			if (player.role === "SPY")
+			{
+				reason = "SPY_DEPARTED";
+			}
+			else if (remainingPlayers.length <= 2)
+			{
+				reason = "INSUFFICIENT_PLAYERS";
+			}
+
+			let finalResult: GameFinalResult | null = null;
+
+			// Terminate immediately, if required
+			if (reason !== null)
+			{
+				const endedAt = new Date(nowMs);
+
+				const updatedGame = await tx.game.updateMany(
+				{
+					where:
+					{
+						id: gameId,
+						phase: game.phase,
+					},
+					data:
+					{
+						phase: "TERMINATED",
+						winner: null,
+						terminationReason: reason,
+						phaseEndsAt: null,
+						endedAt,
+					},
+				});
+
+				if (updatedGame.count !== 1)
+				{
+					throw new Error("GAME_STATE_CHANGED");
+				}
+
+				finalResult =
+				{
+					gameId,
+					roomId: game.roomId,
+					status: "TERMINATED",
+					winner: null,
+					reason,
+					endedAt: endedAt.toISOString(),
+				};
+			}
+
+			// Return the committed result
+			return {
+				gameId,
+				roomId: game.roomId,
+				departedUserId: userId,
+				changed: true,
+				finalResult,
+			};
+		},
+		{
+			isolationLevel: "Serializable"
+		});
+
+		// Repeated requests don't produce duplicate events
+		if (!result.changed)
+		{
+			return result;
+		}
+
+		// Announce permanent departure
 		await this.events.publish(
 		{
 			name: "game.player_updated",
-			roomId: resolution.roomId,
+			roomId: result.roomId,
 			payload:
 			{
 				gameId,
@@ -835,71 +1220,20 @@ export class GameService
 				participationStatus: "DEPARTED",
 			},
 		});
-	}
 
-	// Notify the eliminated player
-	if (resolution.eliminatedUserId !== null)
-	{
-		await this.events.publish(
+		// Announce game termination if it occurred
+		if (result.finalResult !== null)
 		{
-			name: "game.player_updated",
-			roomId: resolution.roomId,
-			payload:
+			await this.events.publish(
 			{
-				gameId,
-				userId: resolution.eliminatedUserId,
-				participationStatus: "ELIMINATED",
-			},
-		});
-	}
+				name: "game.ended",
+				roomId: result.roomId,
+				payload: result.finalResult,
+			});
+		}
 
-	// Announce the round result
-	if (resolution.outcome !== null)
-	{
-		await this.events.publish(
-		{
-			name: "game.round_resolved",
-			roomId: resolution.roomId,
-			payload:
-			{
-				gameId,
-				roundNumber: resolution.roundNumber,
-				outcome: resolution.outcome,
-				eliminatedUserId: resolution.eliminatedUserId,
-				eliminatedRole: resolution.eliminatedRole,
-			},
-		});
+		return result;
 	}
-
-	// Announce game completion or the next round
-	if (resolution.finalResult !== null)
-	{
-		await this.events.publish(
-		{
-			name: "game.ended",
-			roomId: resolution.roomId,
-			payload: resolution.finalResult,
-		});
-	}
-	else if (resolution.nextPhase === "CLUE_SUBMISSION" && resolution.phaseEndsAt !== null)
-	{
-		await this.events.publish(
-		{
-			name: "game.phase_changed",
-			roomId: resolution.roomId,
-			payload:
-			{
-				gameId,
-				phase: "CLUE_SUBMISSION",
-				roundNumber: resolution.roundNumber + 1,
-				phaseEndsAt: resolution.phaseEndsAt,
-			},
-		});
-	}
-
-	// Return the result to caller
-	return resolution;
-}
 
 	async advancePhaseIfExpired(gameId: string, nowMs: number = Date.now()): Promise<boolean>
 	{
@@ -962,24 +1296,6 @@ export class GameService
 			return false;
 		}
 
-		// // Update the game in PostgreSQL
-		// const result = await this.prisma.game.updateMany(
-		// {
-		// 	where:
-		// 	{
-		// 		id: gameId,
-		// 		phase: game.phase,
-		// 		phaseEndsAt: game.phaseEndsAt,
-		// 	},
-		// 	data:
-		// 	{
-		// 		phase: nextPhase,
-		// 		phaseEndsAt: new Date(deadlineMs + durationMs),
-		// 	},
-		// });
-
-		// // Exactly one game must have been updated.
-		// return result.count === 1;
 		const nextDeadline = new Date(deadlineMs + durationMs);
 
 		const updated = await this.prisma.game.updateMany(
