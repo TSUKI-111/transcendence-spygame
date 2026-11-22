@@ -4,6 +4,8 @@ import {PrismaService} from "../prisma/prisma.service.js";
 
 import {calculateVotingOutcome} from "./round-resolution.js";
 import {GameEventsService} from "./game-events.service.js";
+import {retryOnTransactionConflict} from "./prisma-transaction-retry.js";
+import {lockGame} from "./game-lock.js";
 
 import type {StartGameRequest, StartGameResponse} from "./contracts/start-game.interface.ts";
 import type {GameRole, PlayerGameState} from "./contracts/player-game-state.interface.ts";
@@ -269,70 +271,9 @@ export class GameService
 		return state;
 	}
 
-	async submitClue(gameId: string, userId: number, clue: string, nowMs: number = Date.now()): Promise<AcceptedClue>
+	async submitClue(gameId: string, userId: number, clue: string, nowMs?: number): Promise<AcceptedClue>
 	{
-		// Find the game
-		const game = await this.prisma.game.findUnique(
-		{
-			where:
-			{
-				id : gameId,
-			},
-			select:
-			{
-				roomId: true,
-				phase: true,
-				currentRoundNumber: true,
-				phaseEndsAt: true,
-			},
-		});
-
-		if (!game)
-		{
-			throw new Error("GAME_NOT_FOUND");
-		}
-
-		// Find the player
-		const player = await this.prisma.gamePlayer.findUnique(
-		{
-			where:
-			{
-				gameId_userId :
-				{
-					gameId,
-					userId
-				},
-			},
-			select:
-			{
-				id: true,
-				participationStatus: true,
-				connectionStatus: true,
-			},
-		});
-
-		if (!player)
-		{
-			throw new Error("NOT_GAME_PARTICIPANT");
-		}
-
-		if (player.participationStatus !== "ACTIVE" || player.connectionStatus !== "CONNECTED")
-		{
-			throw new Error("PLAYER_NOT_ELIGIBLE");
-		}
-
-		// Check phase and deadline
-		if (game.phase !== "CLUE_SUBMISSION")
-		{
-			throw new Error("INVALID_PHASE");
-		}
-
-		if (game.phaseEndsAt === null || nowMs >= game.phaseEndsAt.getTime())
-		{
-			throw new Error("PHASE_EXPIRED");
-		}
-
-		// Validate clue
+		// Validate the clue before starting a transaction
 		if (typeof clue !== "string")
 		{
 			throw new Error("INVALID_CLUE");
@@ -350,226 +291,319 @@ export class GameService
 			throw new Error("CLUE_TOO_LONG");
 		}
 
-		// find the current round
-		const round = await this.prisma.gameRound.findUnique(
-		{
-			where:
-			{
-				gameId_number:
-				{
-					gameId,
-					number: game.currentRoundNumber,
-				}
-			},
-			select:
-			{
-				id: true,
-			},
-		});
+		// Needed to distinguish duplicate clues from multiple submissions by the same player
+		let roundId: number | null = null;
+		let authorId: number | null = null;
 
-		if (!round)
-		{
-			throw new Error("ROUND_NOT_FOUND");
-		}
-
-		// Save the clue to PostgreSQL
 		try
 		{
-			await this.prisma.clue.create(
+			const saved = await retryOnTransactionConflict(() => this.prisma.$transaction(async tx =>
 			{
-				data:
+				// Lock the game before checking its phase
+				await lockGame(tx, gameId);
+
+				// Capture server time AFTER acquiring the lock. nowMs is only for trusted tests/backend calls
+				const submittedAtMs = nowMs ?? Date.now();
+				if (!Number.isFinite(submittedAtMs) || Number.isNaN(new Date(submittedAtMs).getTime()))
 				{
-					roundId: round.id,
-					authorGamePlayerId: player.id,
-					text: cleanClue,
-					normalizedText: cleanClue.toLowerCase(),
-					submittedAt: new Date(nowMs),
-				},
-			});
-		}
-		catch (error)
-		{
-			// PostgreSQL rejected a duplicate.
-			if (error !== null && typeof error === "object" && "code" in error && error.code === "P2002")
-			{
-				const previousClue = await this.prisma.clue.findUnique(
+					throw new Error("INVALID_TIMESTAMP");
+				}
+
+				// Read the current game
+				const game = await tx.game.findUnique(
 				{
 					where:
 					{
-						roundId_authorGamePlayerId:
+						id: gameId,
+					},
+					select:
+					{
+						roomId: true,
+						phase: true,
+						currentRoundNumber: true,
+						phaseEndsAt: true,
+					},
+				});
+
+				if (!game)
+				{
+					throw new Error("GAME_NOT_FOUND");
+				}
+
+				if (game.phase !== "CLUE_SUBMISSION")
+				{
+					throw new Error("INVALID_PHASE");
+				}
+
+				if (game.phaseEndsAt === null || submittedAtMs >= game.phaseEndsAt.getTime())
+				{
+					throw new Error("PHASE_EXPIRED");
+				}
+
+				// Check the player
+				const player = await tx.gamePlayer.findUnique(
+				{
+					where:
+					{
+						gameId_userId:
 						{
-							roundId: round.id,
-							authorGamePlayerId: player.id,
+							gameId,
+							userId,
 						},
+					},
+					select:
+					{
+						id: true,
+						participationStatus: true,
+						connectionStatus: true,
+					},
+				});
+
+				if (!player)
+				{
+					throw new Error("NOT_GAME_PARTICIPANT");
+				}
+
+				if (player.participationStatus !== "ACTIVE" || player.connectionStatus !== "CONNECTED")
+				{
+					throw new Error("PLAYER_NOT_ELIGIBLE");
+				}
+
+				// Read the current round
+				const round = await tx.gameRound.findUnique(
+				{
+					where:
+					{
+						gameId_number:
+						{
+							gameId,
+							number: game.currentRoundNumber,
+						}
 					},
 					select:
 					{
 						id: true,
 					},
 				});
+
+				if (!round)
+				{
+					throw new Error("ROUND_NOT_FOUND");
+				}
+
+				roundId = round.id;
+				authorId = player.id;
+
+				// Save the clue inside the transaction
+				await tx.clue.create(
+				{
+					data:
+					{
+						roundId: round.id,
+						authorGamePlayerId: player.id,
+						text: cleanClue,
+						normalizedText: cleanClue.toLowerCase(),
+						submittedAt: new Date(submittedAtMs),
+					},
+				});
+				const acceptedClue: AcceptedClue =
+				{
+					gameId,
+					roundNumber: game.currentRoundNumber,
+					userId,
+					clue: cleanClue,
+				};
+
+				return {
+					roomId: game.roomId,
+					acceptedClue,
+				};
+			},
+			{
+				isolationLevel: "Serializable"
+			}),
+			);
+
+			// The transaction committed successfully. Only now publish the public clue event.
+			await this.events.publish(
+			{
+				name: "game.clue_submitted",
+				roomId: saved.roomId,
+				payload: saved.acceptedClue,
+			});
+			return saved.acceptedClue;
+		}
+		catch (error)
+		{
+			if (error !== null && typeof error === "object" && "code" in error && error.code === "P2002")
+			{
+				// A failed INSERT aborts the transaction. Check for the player's previous clue OUTSIDE it
+				const previousClue = roundId !== null && authorId !== null ? await this.prisma.clue.findUnique(
+				{
+					where:
+					{
+						roundId_authorGamePlayerId:
+						{
+							roundId,
+							authorGamePlayerId: authorId,
+						},
+					},
+					select:
+					{
+						id: true,
+					},
+				}) : null;
 				if (previousClue)
 				{
 					throw new Error("CLUE_ALREADY_SUBMITTED");
 				}
+
 				throw new Error("DUPLICATE_CLUE");
 			}
 			throw error;
 		}
-
-		// Return the accepted clue
-		const acceptedClue: AcceptedClue =
-		{
-			gameId,
-			roundNumber: game.currentRoundNumber,
-			userId,
-			clue: cleanClue,
-		};
-		await this.events.publish(
-		{
-			name: "game.clue_submitted",
-			roomId: game.roomId,
-			payload: acceptedClue,
-		});
-		return acceptedClue;
 	}
 
-	async submitVote(gameId: string, voterUserId: number, targetUserId: number, nowMs: number = Date.now()): Promise<void>
+	async submitVote(gameId: string, voterUserId: number, targetUserId: number, nowMs?: number): Promise<void>
 	{
-		// Validate IDs
 		if (typeof gameId !== "string" || gameId.trim() === "" || !Number.isSafeInteger(voterUserId) || voterUserId <= 0 || !Number.isSafeInteger(targetUserId) || targetUserId <= 0)
 		{
 			throw new Error("INVALID_VOTE_REQUEST");
 		}
-
-		// Find the game
-		const game = await this.prisma.game.findUnique(
-		{
-			where:
-			{
-				id : gameId,
-			},
-			select:
-			{
-				phase: true,
-				currentRoundNumber: true,
-				phaseEndsAt: true,
-			},
-		});
-
-		if (!game)
-		{
-			throw new Error("GAME_NOT_FOUND");
-		}
-
-		// Check the voting phase
-		if (game.phase !== "VOTING")
-		{
-			throw new Error("INVALID_PHASE");
-		}
-
-		// Check the voting deadline
-		if (game.phaseEndsAt === null || nowMs >= game.phaseEndsAt.getTime())
-		{
-			throw new Error("PHASE_EXPIRED");
-		}
-
-		// Find the voter in this game
-		const voter = await this.prisma.gamePlayer.findUnique(
-		{
-			where:
-			{
-				gameId_userId :
-				{
-					gameId,
-					userId: voterUserId,
-				},
-			},
-			select:
-			{
-				id: true,
-				participationStatus: true,
-				connectionStatus: true,
-			},
-		});
-
-		if (!voter)
-		{
-			throw new Error("NOT_GAME_PARTICIPANT");
-		}
-
-		// Check whether the voter can vote
-		if (voter.participationStatus !== "ACTIVE" || voter.connectionStatus !== "CONNECTED")
-		{
-			throw new Error("VOTER_NOT_ELIGIBLE");
-		}
-
-		// Find the target player in the same game
-		const target = await this.prisma.gamePlayer.findUnique(
-		{
-			where:
-			{
-				gameId_userId :
-				{
-					gameId,
-					userId: targetUserId,
-				},
-			},
-			select:
-			{
-				id: true,
-				participationStatus: true,
-			},
-		});
-
-		// Find the current round
-		const round = await this.prisma.gameRound.findUnique(
-		{
-			where:
-			{
-				gameId_number:
-				{
-					gameId,
-					number: game.currentRoundNumber,
-				}
-			},
-			select:
-			{
-				id: true,
-			},
-		});
-
-		if (!round)
-		{
-			throw new Error("ROUND_NOT_FOUND");
-		}
-
-		if (!target)
-		{
-			throw new Error('INVALID_VOTE_TARGET');
-		}
-
-		if (target.participationStatus !== 'ACTIVE')
-		{
-			throw new Error('INVALID_VOTE_TARGET');
-		}
-
-		// Save the private vote
 		try
 		{
-			await this.prisma.vote.create(
+			await retryOnTransactionConflict(() => this.prisma.$transaction(async tx =>
 			{
-				data:
+				// Lock the game
+				await lockGame(tx, gameId);
+
+				const submittedAtMs = nowMs ?? Date.now();
+
+				if (!Number.isFinite(submittedAtMs) || Number.isNaN(new Date(submittedAtMs).getTime()))
 				{
-					roundId: round.id,
-					voterGamePlayerId: voter.id,
-					targetGamePlayerId: target.id,
-					submittedAt: new Date(nowMs),
-				},
-			});
+					throw new Error("INVALID_TIMESTAMP");
+				}
+
+				// Read the game AFTER acquiring the lock
+				const game = await tx.game.findUnique(
+				{
+						where:
+						{
+							id: gameId
+						},
+						select:
+						{
+							phase: true,
+							currentRoundNumber: true,
+							phaseEndsAt: true,
+						},
+				});
+
+				if (!game)
+				{
+					throw new Error("GAME_NOT_FOUND");
+				}
+				if (game.phase !== "VOTING")
+				{
+					throw new Error("INVALID_PHASE");
+				}
+				if (game.phaseEndsAt === null || submittedAtMs >= game.phaseEndsAt.getTime())
+				{
+					throw new Error("PHASE_EXPIRED");
+				}
+
+				// Find the voter
+				const voter = await tx.gamePlayer.findUnique(
+				{
+					where:
+					{
+						gameId_userId:
+						{
+							gameId,
+							userId: voterUserId,
+						},
+					},
+					select:
+					{
+						id: true,
+						participationStatus: true,
+						connectionStatus: true,
+					}
+				});
+
+				if (!voter)
+				{
+					throw new Error("NOT_GAME_PARTICIPANT");
+				}
+				if (voter.participationStatus !== "ACTIVE" || voter.connectionStatus !== "CONNECTED")
+				{
+					throw new Error("VOTER_NOT_ELIGIBLE");
+				}
+
+				// Find the target in the same game
+				const target = await tx.gamePlayer.findUnique(
+				{
+					where:
+					{
+						gameId_userId:
+						{
+							gameId,
+							userId: targetUserId,
+						},
+					},
+					select:
+					{
+						id: true,
+						participationStatus: true,
+					}
+				});
+
+				if (!target || target.participationStatus !== "ACTIVE")
+				{
+					throw new Error("INVALID_VOTE_TARGET");
+				}
+
+				// Self-voting is allowed
+
+				// Find the current round
+				const round = await tx.gameRound.findUnique(
+				{
+					where:
+					{
+						gameId_number:
+						{
+							gameId,
+							number: game.currentRoundNumber,
+						},
+					},
+					select:
+					{
+						id: true
+					},
+				});
+				if (!round)
+				{
+					throw new Error("ROUND_NOT_FOUND");
+				}
+
+				// Save the private vote
+				await tx.vote.create(
+				{
+					data:
+					{
+						roundId: round.id,
+						voterGamePlayerId: voter.id,
+						targetGamePlayerId: target.id,
+						submittedAt: new Date(submittedAtMs),
+					}
+				});
+			},
+			{
+				isolationLevel: 'ReadCommitted'
+			}));
 		}
 		catch (error)
 		{
-			// One vote per player per round
 			if (error !== null && typeof error === "object" && "code" in error && error.code === "P2002")
 			{
 				throw new Error("VOTE_ALREADY_SUBMITTED");
@@ -581,8 +615,10 @@ export class GameService
 
 	async resolveRound(gameId: string, nowMs: number = Date.now()): Promise<RoundResolutionResult>
 	{
-		const resolution = await this.prisma.$transaction(async tx =>
+		const resolution = await retryOnTransactionConflict(() => this.prisma.$transaction(async tx =>
 		{
+			// Lock this game before reading its votes
+			await lockGame(tx, gameId);
 
 			// Read the game and all its original players
 			const game = await tx.game.findUnique(
@@ -820,7 +856,7 @@ export class GameService
 		},
 		{
 			isolationLevel: 'Serializable'
-		});
+		}));
 
 		// Notify permanently departed players
 		for (const userId of resolution.departedUserIds)
@@ -914,6 +950,9 @@ export class GameService
 		const result = await this.prisma.$transaction(
 			async tx =>
 			{
+
+				await lockGame(tx, gameId);
+
 				const game = await tx.game.findUnique(
 				{
 					where:
@@ -1055,6 +1094,9 @@ export class GameService
 		// Save the departure and possible game termination together in a database transaction
 		const result = await this.prisma.$transaction(async tx =>
 		{
+
+			await lockGame(tx, gameId);
+
 			const game = await tx.game.findUnique(
 			{
 				where:
