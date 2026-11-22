@@ -24,3 +24,7 @@ coverage/
 .idea/
 .DS_Store
 /nginx/certs/
+backups/*.dump
+
+# Prisma generated client
+/backend/src/generated/prisma/
