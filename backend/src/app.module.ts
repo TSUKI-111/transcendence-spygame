@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CsrfOriginGuard } from './auth/guards/csrf-origin.guard.js';
 import { RoomsModule } from './rooms/rooms.module.js';
+import { GameModule } from './game/game.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { RoomsModule } from './rooms/rooms.module.js';
     PrismaModule,
     AuthModule,
     RoomsModule,
+	GameModule,
   ],
   controllers: [AppController],
   providers: [
