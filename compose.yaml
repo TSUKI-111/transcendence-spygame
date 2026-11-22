@@ -7,8 +7,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
 
-    ports:
-      - "${POSTGRES_PORT}:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -18,16 +16,49 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  
+  db-backup:
+    image: postgres:17
+
+    environment: 
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+
+    depends_on:
+      db:
+        condition: service_healthy
+    
+    volumes:
+      - ./backups:/backups
+    
+    command: >
+      sh -c '
+      while true; do
+        pg_dump
+        -h db
+        -U "${POSTGRES_USER}"
+        -d "${POSTGRES_DB}"
+        -F c
+        -f "/backups/backup_$$(date +%Y-%m-%d_%H-%M-%S).dump";
+
+        find /backups
+        -type f
+        -name "backup_*.dump"
+        -mtime +7
+        -delete;
+
+        sleep 86400;
+      done
+      '
+
 
   backend:
     build:
       context: ./backend
 
-    ports:
-      - "3000:3000"
 
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN doit etre definie dans .env}
 
     depends_on:
       db:
@@ -46,11 +77,9 @@ services:
     build:
       context: ./frontend
 
-    ports:
-      - "5173:5173"
 
   nginx:
-    image: nginx:alpine
+    image: nginx:alpine 
 
     ports:
       - "8080:80"
