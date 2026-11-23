@@ -923,6 +923,105 @@ describe('GameService', () => {
     expect(txMock.gameRound.create).not.toHaveBeenCalled();
   });
 
+  it('counts votes against a disconnected Spy before departures', async () => {
+    // Create three players, with the Spy disconnected.
+    const players = players3.map(player =>
+      player.role === 'SPY'
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    // Both Detectives vote for the Spy (GamePlayer ID 11).
+    const { gameId } = mockRoundResolution(
+      [11, 11],
+      players
+    );
+
+    // Voting deadline has expired.
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    // Voting must resolve before checking disconnections.
+    expect(result.outcome).toBe('ELIMINATED');
+    expect(result.eliminatedUserId).toBe(1);
+    expect(result.nextPhase).toBe('FINISHED');
+
+    // Detectives must win, not terminate.
+    expect(result.finalResult?.winner).toBe('DETECTIVES');
+    expect(result.finalResult?.reason).toBeNull();
+
+    // No disconnection departures after a normal victory.
+    expect(result.departedUserIds).toEqual([]);
+  });
+
+  it('eliminates a disconnected Detective without marking them departed', async () => {
+    const players = players3.map(player =>
+      player.id === 12
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    // Both remaining players voted for the disconnected Detective.
+    const { gameId } = mockRoundResolution([12, 12], players);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('ELIMINATED');
+    expect(result.eliminatedUserId).toBe(2);
+    expect(result.nextPhase).toBe('FINISHED');
+    expect(result.finalResult?.winner).toBe('SPY');
+
+    expect(result.departedUserIds).toEqual([]);
+
+    expect(txMock.gamePlayer.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { participationStatus: 'ELIMINATED' },
+    });
+
+    expect(txMock.gamePlayer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('terminates after recording a tie when the Spy remains disconnected', async () => {
+    const players = players3.map(player =>
+      player.role === 'SPY'
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    // One vote for the Spy, one for a Detective: tie.
+    const { gameId } = mockRoundResolution([11, 12], players);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('TIE');
+    expect(result.eliminatedUserId).toBeNull();
+
+    // No voting winner, so the Spy's disconnection causes termination.
+    expect(result.nextPhase).toBe('TERMINATED');
+    expect(result.finalResult?.winner).toBeNull();
+    expect(result.finalResult?.reason).toBe('SPY_DEPARTED');
+
+    expect(result.departedUserIds).toEqual([1]);
+
+    // The voting outcome must still be saved.
+    expect(txMock.gameRound.update).toHaveBeenCalledWith({
+      where: { id: 101 },
+      data: {
+        outcome: 'TIE',
+        eliminatedGamePlayerId: null,
+        resolvedAt: dbDeadline,
+      },
+    });
+  });
+
   it('Spy wins when Detective elimination leaves two players', async () => {
     const { gameId } =
       mockRoundResolution([12, 12, 11]);
@@ -998,17 +1097,18 @@ describe('GameService', () => {
         : player
     );
     const { gameId } =
-      mockRoundResolution([11, 11], disconnectedPlayers);
+      mockRoundResolution([], disconnectedPlayers);
     const result = await service.resolveRound(
       gameId,
       dbDeadline.getTime()
     );
     expect(result.nextPhase).toBe('TERMINATED');
-    expect(result.outcome).toBeNull();
+    expect(result.outcome).toBe('NO_VOTES');
+    expect(result.departedUserIds).toEqual([1]);
     expect(result.finalResult?.winner).toBeNull();
     expect(result.finalResult?.reason).toBe('SPY_DEPARTED');
     expect(txMock.gamePlayer.updateMany).toHaveBeenCalled();
-    expect(txMock.gameRound.update).not.toHaveBeenCalled();
+    expect(txMock.gameRound.update).toHaveBeenCalled();
   });
 
   it('terminates if departures leave fewer than three players', async () => {
