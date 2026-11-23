@@ -8,11 +8,31 @@ on:
 
 jobs:
   backend:
+    needs: migrations
     runs-on: ubuntu-latest
 
     defaults:
       run:
         working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: transcendence
+          POSTGRES_PASSWORD: transcendence
+          POSTGRES_DB: spygame_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U transcendence -d spygame_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/spygame_test
+      APP_ORIGIN: https://localhost:8443
 
     steps:
       - name: Checkout repository
@@ -29,44 +49,45 @@ jobs:
         run: npm ci
 
       - name: Validate Prisma schema
-        run: |
-          DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy \
-          ./node_modules/.bin/prisma validate
+        run: ./node_modules/.bin/prisma validate
 
       - name: Generate Prisma client
-        run: |
-          DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy \
-          ./node_modules/.bin/prisma generate
+        run: ./node_modules/.bin/prisma generate
+
+      - name: Apply Prisma migrations
+        run: ./node_modules/.bin/prisma migrate deploy
 
       - name: Run backend tests
         run: npm test
 
       - name: Build backend
         run: npm run build
-  
+
+
   migrations:
     runs-on: ubuntu-latest
 
     defaults:
       run:
         working-directory: backend
-    
+
     services:
       postgres:
         image: postgres:17
         env:
           POSTGRES_USER: transcendence
           POSTGRES_PASSWORD: transcendence
-          POSTGRES_DB: transcendence
+          POSTGRES_DB: spygame_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U transcendence -d transcendence"
+          --health-cmd="pg_isready -U transcendence -d spygame_test"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+
     env:
-      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/transcendence
+      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/spygame_test
 
     steps:
       - name: Checkout repository
@@ -87,6 +108,7 @@ jobs:
 
       - name: Check migration status
         run: ./node_modules/.bin/prisma migrate status
+
 
   frontend:
     runs-on: ubuntu-latest
@@ -111,6 +133,7 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
 
   docker:
     runs-on: ubuntu-latest
