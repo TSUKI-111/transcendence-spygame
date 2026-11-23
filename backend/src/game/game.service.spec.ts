@@ -390,12 +390,14 @@ describe('GameService', () => {
     const gameId = randomUUID();
     prismaMock.game.findUnique.mockResolvedValueOnce({
       id: gameId,
+      players: [],
       phase: 'CLUE_SUBMISSION',
       currentRoundNumber: 1,
       phaseEndsAt: dbDeadline,
       secretWord: 'ocean',
     });
     prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
       role: 'DETECTIVE',
     });
     prismaMock.gameRound.findUnique.mockResolvedValueOnce({
@@ -405,6 +407,7 @@ describe('GameService', () => {
           author: { userId: 1 },
         },
       ],
+      votes: [],
     });
     const state = await service.getPlayerState(gameId, 1);
     expect(state.gameId).toBe(gameId);
@@ -419,6 +422,239 @@ describe('GameService', () => {
     );
   });
 
+  it('returns public player statuses without revealing other roles', async () => {
+    const gameId = randomUUID();
+
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      id: gameId,
+      phase: 'CLUE_SUBMISSION',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+      secretWord: 'ocean',
+      players: [
+        {
+          userId: 1,
+          participationStatus: 'ACTIVE',
+          connectionStatus: 'CONNECTED',
+        },
+        {
+          userId: 2,
+          participationStatus: 'ACTIVE',
+          connectionStatus: 'DISCONNECTED',
+        },
+        {
+          userId: 3,
+          participationStatus: 'ELIMINATED',
+          connectionStatus: 'CONNECTED',
+        },
+      ],
+    });
+
+    // Player 1 is the Spy.
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      role: 'SPY',
+    });
+
+    prismaMock.gameRound.findUnique.mockResolvedValueOnce({
+      clues: [],
+      votes: [],
+    });
+
+    const state = await service.getPlayerState(gameId, 1);
+
+    // Every participant's public status is available.
+    expect(state.players).toEqual([
+      {
+        userId: 1,
+        participationStatus: 'ACTIVE',
+        connectionStatus: 'CONNECTED',
+      },
+      {
+        userId: 2,
+        participationStatus: 'ACTIVE',
+        connectionStatus: 'DISCONNECTED',
+      },
+      {
+        userId: 3,
+        participationStatus: 'ELIMINATED',
+        connectionStatus: 'CONNECTED',
+      },
+    ]);
+
+    // Other players' secret roles must not be exposed.
+    for (const player of state.players) {
+      expect(player).not.toHaveProperty('role');
+    }
+
+    // The Spy must still not receive the secret word.
+    expect(state.role).toBe('SPY');
+    expect(state).not.toHaveProperty('secretWord');
+  });
+
+
+  it('returns whether the current player already voted', async () => {
+    const gameId = randomUUID();
+
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      id: gameId,
+      phase: 'VOTING',
+      currentRoundNumber: 1,
+      phaseEndsAt: dbDeadline,
+      secretWord: 'ocean',
+      players: [],
+    });
+
+    // The requesting player's internal GamePlayer ID is 77.
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      role: 'DETECTIVE',
+    });
+
+    // The player has one vote saved in the current round.
+    prismaMock.gameRound.findUnique.mockResolvedValueOnce({
+      clues: [],
+      votes: [{ id: 101 }],
+    });
+
+    const state = await service.getPlayerState(gameId, 1);
+
+    expect(state.hasSubmittedVote).toBe(true);
+
+    // The response must not expose the player's vote choice.
+    expect(state).not.toHaveProperty('votes');
+    expect(state).not.toHaveProperty('targetUserId');
+  });
+
+  it('reveals the Spy and secret word after a normal victory', async () => {
+    const gameId = randomUUID();
+    const endedAt = new Date('2030-01-01T12:05:00.000Z');
+
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      id: gameId,
+      phase: 'FINISHED',
+      currentRoundNumber: 1,
+      phaseEndsAt: null,
+      secretWord: 'ocean',
+      winner: 'DETECTIVES',
+      terminationReason: null,
+      endedAt,
+      players: [
+        {
+          userId: 1,
+          role: 'SPY',
+          participationStatus: 'ELIMINATED',
+          connectionStatus: 'CONNECTED',
+        },
+        {
+          userId: 2,
+          role: 'DETECTIVE',
+          participationStatus: 'ACTIVE',
+          connectionStatus: 'CONNECTED',
+        },
+        {
+          userId: 3,
+          role: 'DETECTIVE',
+          participationStatus: 'ACTIVE',
+          connectionStatus: 'CONNECTED',
+        },
+      ],
+    });
+
+    // The requesting player is the Spy.
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      role: 'SPY',
+    });
+
+    prismaMock.gameRound.findUnique.mockResolvedValueOnce({
+      clues: [],
+      votes: [],
+    });
+
+    const state = await service.getPlayerState(gameId, 1);
+
+    expect(state.finalResult).toEqual({
+      gameId,
+      status: 'FINISHED',
+      winner: 'DETECTIVES',
+      reason: null,
+      endedAt: endedAt.toISOString(),
+      revelation: {
+        spyUserId: 1,
+        secretWord: 'ocean',
+      },
+    });
+
+    // No other players' roles are exposed through the public list.
+    for (const player of state.players) {
+      expect(player).not.toHaveProperty('role');
+    }
+  });
+
+  it('does not reveal secrets when the game is terminated', async () => {
+    const gameId = randomUUID();
+    const endedAt = new Date('2030-01-01T12:05:00.000Z');
+  
+    prismaMock.game.findUnique.mockResolvedValueOnce({
+      id: gameId,
+      phase: 'TERMINATED',
+      currentRoundNumber: 1,
+      phaseEndsAt: null,
+      secretWord: 'ocean',
+      winner: null,
+      terminationReason: 'SPY_DEPARTED',
+      endedAt,
+      players: [
+        {
+          userId: 1,
+          role: 'SPY',
+          participationStatus: 'DEPARTED',
+          connectionStatus: 'DISCONNECTED',
+        },
+        {
+          userId: 2,
+          role: 'DETECTIVE',
+          participationStatus: 'ACTIVE',
+          connectionStatus: 'CONNECTED',
+        },
+        {
+          userId: 3,
+          role: 'DETECTIVE',
+          participationStatus: 'ACTIVE',
+          connectionStatus: 'CONNECTED',
+        },
+      ],
+    });
+  
+    prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
+      role: 'SPY',
+    });
+  
+    prismaMock.gameRound.findUnique.mockResolvedValueOnce({
+      clues: [],
+      votes: [],
+    });
+  
+    const state = await service.getPlayerState(gameId, 1);
+  
+    expect(state.finalResult).toEqual({
+      gameId,
+      status: 'TERMINATED',
+      winner: null,
+      reason: 'SPY_DEPARTED',
+      endedAt: endedAt.toISOString(),
+      revelation: null,
+    });
+  
+    expect(state).not.toHaveProperty('secretWord');
+  
+    for (const player of state.players) {
+      expect(player).not.toHaveProperty('role');
+    }
+  });
+
   it('never exposes the secret word to the Spy', async () => {
     const gameId = randomUUID();
     prismaMock.game.findUnique.mockResolvedValueOnce({
@@ -427,12 +663,15 @@ describe('GameService', () => {
       currentRoundNumber: 1,
       phaseEndsAt: dbDeadline,
       secretWord: 'ocean',
+      players: [],
     });
     prismaMock.gamePlayer.findUnique.mockResolvedValueOnce({
+      id: 77,
       role: 'SPY',
     });
     prismaMock.gameRound.findUnique.mockResolvedValueOnce({
       clues: [],
+      votes: [],
     });
     const state = await service.getPlayerState(gameId, 2);
     expect(state.role).toBe('SPY');
@@ -923,6 +1162,105 @@ describe('GameService', () => {
     expect(txMock.gameRound.create).not.toHaveBeenCalled();
   });
 
+  it('counts votes against a disconnected Spy before departures', async () => {
+    // Create three players, with the Spy disconnected.
+    const players = players3.map(player =>
+      player.role === 'SPY'
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    // Both Detectives vote for the Spy (GamePlayer ID 11).
+    const { gameId } = mockRoundResolution(
+      [11, 11],
+      players
+    );
+
+    // Voting deadline has expired.
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    // Voting must resolve before checking disconnections.
+    expect(result.outcome).toBe('ELIMINATED');
+    expect(result.eliminatedUserId).toBe(1);
+    expect(result.nextPhase).toBe('FINISHED');
+
+    // Detectives must win, not terminate.
+    expect(result.finalResult?.winner).toBe('DETECTIVES');
+    expect(result.finalResult?.reason).toBeNull();
+
+    // No disconnection departures after a normal victory.
+    expect(result.departedUserIds).toEqual([]);
+  });
+
+  it('eliminates a disconnected Detective without marking them departed', async () => {
+    const players = players3.map(player =>
+      player.id === 12
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    // Both remaining players voted for the disconnected Detective.
+    const { gameId } = mockRoundResolution([12, 12], players);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('ELIMINATED');
+    expect(result.eliminatedUserId).toBe(2);
+    expect(result.nextPhase).toBe('FINISHED');
+    expect(result.finalResult?.winner).toBe('SPY');
+
+    expect(result.departedUserIds).toEqual([]);
+
+    expect(txMock.gamePlayer.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { participationStatus: 'ELIMINATED' },
+    });
+
+    expect(txMock.gamePlayer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('terminates after recording a tie when the Spy remains disconnected', async () => {
+    const players = players3.map(player =>
+      player.role === 'SPY'
+        ? { ...player, connectionStatus: 'DISCONNECTED' }
+        : player
+    );
+
+    // One vote for the Spy, one for a Detective: tie.
+    const { gameId } = mockRoundResolution([11, 12], players);
+
+    const result = await service.resolveRound(
+      gameId,
+      dbDeadline.getTime()
+    );
+
+    expect(result.outcome).toBe('TIE');
+    expect(result.eliminatedUserId).toBeNull();
+
+    // No voting winner, so the Spy's disconnection causes termination.
+    expect(result.nextPhase).toBe('TERMINATED');
+    expect(result.finalResult?.winner).toBeNull();
+    expect(result.finalResult?.reason).toBe('SPY_DEPARTED');
+
+    expect(result.departedUserIds).toEqual([1]);
+
+    // The voting outcome must still be saved.
+    expect(txMock.gameRound.update).toHaveBeenCalledWith({
+      where: { id: 101 },
+      data: {
+        outcome: 'TIE',
+        eliminatedGamePlayerId: null,
+        resolvedAt: dbDeadline,
+      },
+    });
+  });
+
   it('Spy wins when Detective elimination leaves two players', async () => {
     const { gameId } =
       mockRoundResolution([12, 12, 11]);
@@ -998,17 +1336,18 @@ describe('GameService', () => {
         : player
     );
     const { gameId } =
-      mockRoundResolution([11, 11], disconnectedPlayers);
+      mockRoundResolution([], disconnectedPlayers);
     const result = await service.resolveRound(
       gameId,
       dbDeadline.getTime()
     );
     expect(result.nextPhase).toBe('TERMINATED');
-    expect(result.outcome).toBeNull();
+    expect(result.outcome).toBe('NO_VOTES');
+    expect(result.departedUserIds).toEqual([1]);
     expect(result.finalResult?.winner).toBeNull();
     expect(result.finalResult?.reason).toBe('SPY_DEPARTED');
     expect(txMock.gamePlayer.updateMany).toHaveBeenCalled();
-    expect(txMock.gameRound.update).not.toHaveBeenCalled();
+    expect(txMock.gameRound.update).toHaveBeenCalled();
   });
 
   it('terminates if departures leave fewer than three players', async () => {
