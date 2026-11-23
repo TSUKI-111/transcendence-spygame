@@ -232,10 +232,12 @@ describe('Authentication — parcours complet', () => {
       .set('Cookie', sessionCookie)
       .expect(401);
 
-    expect(
-      await prisma.session.count({
-        where: { userId: storedUser.id },
-      }),
-    ).toBe(0);
+    const remainingSessions = await prisma.session.count({
+    where: {
+        userId: storedUser.id,
+    },
+    });
+
+    expect(remainingSessions).toBe(0);
   }, 30_000);
 });

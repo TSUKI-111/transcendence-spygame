@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RoomGateway } from './room.gateway.js';
 import { RoomEventsPublisher } from './events/room-events.publisher.js';
 import type { Server } from 'socket.io';
+import type { WsSessionAuthService } from '../auth/ws-session-auth.service.js';
 
 describe('RoomGateway', () => {
   let gateway: RoomGateway;
   let publisher: RoomEventsPublisher;
   let mockServer: {
+    use: ReturnType<typeof vi.fn>;
     to: ReturnType<typeof vi.fn>;
     emit: ReturnType<typeof vi.fn>;
   };
@@ -15,11 +17,16 @@ describe('RoomGateway', () => {
     publisher = new RoomEventsPublisher();
 
     mockServer = {
+      use: vi.fn(),
       to: vi.fn().mockReturnThis(),
       emit: vi.fn(),
     };
 
-    gateway = new RoomGateway(publisher);
+    const wsAuth = {
+      authenticate: vi.fn().mockResolvedValue(undefined),
+    } as unknown as WsSessionAuthService;
+
+    gateway = new RoomGateway(publisher, wsAuth);
     gateway.afterInit(mockServer as unknown as Server);
   });
 
