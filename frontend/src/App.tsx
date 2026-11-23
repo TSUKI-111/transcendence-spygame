@@ -8,23 +8,23 @@ import RoomsPage from "./pages/RoomsPage";
 import LobbyPage from "./pages/LobbyPage";
 import GamePage from "./pages/GamePage";
 import PlayPage from "./pages/PlayPage";
+import RequireAuth from "./components/RequireAuth";
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<AuthLayout />}>
-      </Route>
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/login" element={<LoginPage />} />
+      <Route element={<AuthLayout />}></Route>
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<RequireAuth />}>
       <Route element={<AppLayout />}>
-        
         <Route path="/play" element={<PlayPage />} />
         <Route path="/rooms" element={<RoomsPage />} />
         <Route path="/lobby/:roomId" element={<LobbyPage />} />
         <Route path="/game/:gameId" element={<GamePage />} />
       </Route>
+      </Route>
       <Route path="/" element={<HomePage />} />
-      
     </Routes>
   );
 }

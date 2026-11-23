@@ -2,6 +2,8 @@ import { NavLink, Outlet } from "react-router-dom";
 import homeimg from "../assets/icons/home.png";
 import roomsimg from "../assets/icons/rooms.png";
 import playimg from "../assets/icons/crown.png";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const links = [
   { to: "/", label: "Home", img: homeimg },
@@ -10,12 +12,23 @@ const links = [
 ];
 
 export default function AppLayout() {
+
+
+  const {user, logout } = useAuth();
+const navigate = useNavigate();   // import it from react-router-dom
+
+async function handleLogout() {
+  await logout();
+  navigate("/login");
+}
+
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
       <aside className="flex w-56 flex-col border-r border-slate-900 bg-slate-950 p-4">
         <h1 className="text-4xl">
           SPY <span className="text-violet-500"> GAME </span>{" "}
         </h1>
+        <h1>{user?.username}</h1>
         <nav className="flex flex-1 flex-col gap-1 mt-10">
           {links.map((link) => (
             <div className=" flex flex-row items-center">
@@ -36,7 +49,7 @@ export default function AppLayout() {
             </div>
           ))}
         </nav>
-        <button className="rounded-lg px-3 py-2 text-left text-slate-300 hover:bg-slate-800">
+        <button onClick={handleLogout} className="rounded-lg px-3 py-2 text-left text-slate-300 hover:bg-slate-800">
           Logout
         </button>
       </aside>
