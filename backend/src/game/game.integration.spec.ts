@@ -760,5 +760,102 @@ it('persists a tie before terminating for Spy disconnection', async () => {
 });
 
 
+it('keeps roles private during play and reveals the Spy after victory', async () => {
+  const { users, room } = await createFixture();
+
+  const started = await service.startGame({
+    roomId: room.id,
+    participantIds: users.map(user => user.id),
+  });
+
+  const players = await prisma.gamePlayer.findMany({
+    where: { gameId: started.gameId },
+  });
+
+  const spy = players.find(p => p.role === 'SPY')!;
+  const detectives = players.filter(p => p.role === 'DETECTIVE');
+
+  // 1. Retrieve private states while the game is active.
+  const spyBefore = await service.getPlayerState(
+    started.gameId,
+    spy.userId,
+  );
+
+  const detectiveBefore = await service.getPlayerState(
+    started.gameId,
+    detectives[0].userId,
+  );
+
+  // The Spy cannot see the secret word.
+  expect(spyBefore).not.toHaveProperty('secretWord');
+  expect(spyBefore.finalResult).toBeNull();
+
+  // The Detective knows the word, but not the Spy's identity.
+  expect(detectiveBefore.secretWord).toEqual(expect.any(String));
+  expect(detectiveBefore.finalResult).toBeNull();
+
+  for (const player of detectiveBefore.players) {
+    expect(player).not.toHaveProperty('role');
+  }
+
+  // 2. Enter voting with time remaining.
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phase: 'VOTING',
+      phaseEndsAt: new Date(Date.now() + 60_000),
+    },
+  });
+
+  // Both Detectives vote for the Spy.
+  for (const detective of detectives) {
+    await service.submitVote(
+      started.gameId,
+      detective.userId,
+      spy.userId,
+    );
+  }
+
+  // 3. Expire the voting deadline.
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phaseEndsAt: new Date(Date.now() - 1000),
+    },
+  });
+
+  const resolution = await service.resolveRound(started.gameId);
+
+  expect(resolution.nextPhase).toBe('FINISHED');
+  expect(resolution.finalResult?.winner).toBe('DETECTIVES');
+
+  // 4. Both roles must receive the final revelation.
+  for (const userId of [spy.userId, detectives[0].userId]) {
+    const state = await service.getPlayerState(
+      started.gameId,
+      userId,
+    );
+
+    expect(state.phase).toBe('FINISHED');
+
+    expect(state.finalResult).toEqual({
+      gameId: started.gameId,
+      status: 'FINISHED',
+      winner: 'DETECTIVES',
+      reason: null,
+      endedAt: expect.any(String),
+      revelation: {
+        spyUserId: spy.userId,
+        secretWord: detectiveBefore.secretWord,
+      },
+    });
+
+    // The public player list still contains no secret roles.
+    for (const player of state.players) {
+      expect(player).not.toHaveProperty('role');
+    }
+  }
+});
+
   },
 );

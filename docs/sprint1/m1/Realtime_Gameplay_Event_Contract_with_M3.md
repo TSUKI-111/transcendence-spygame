@@ -1,8 +1,8 @@
-# M1 — Realtime Gameplay Event Contract with M3
+**Game Engine & Gameplay UI Integration**
 
-**Sprint 1 — Task 4: Game Engine & Gameplay UI Integration**
-
-**Status:** Proposed by M1 — awaiting M3 confirmation.
+**Status:** M1–M3 data contracts agreed.
+**Implementation:** M1 GameService contracts implemented and tested.
+**Pending:** WebSocket Gateway integration and frontend delivery.
 
 ## 1. Purpose and Scope
 
@@ -30,18 +30,42 @@
 
 ## 3. Server-to-Client Events
 
+
 **Event: `game.state` — Private**
 
-- Sent to an individual authenticated player after entering an ongoing game or requesting state restoration.
-- Provides:
-  - Game ID, phase, round number and current deadline.
-  - Public participant statuses.
-  - Accepted clues from the current round.
-  - The requesting player's own role.
-  - The requesting player's clue-submission and voting status.
-  - The secret word only when the requesting player is an authorized Detective.
-- Used for initial state retrieval and reconnection.
-- Other players' secret roles and vote choices must not be included.
+- Contains the requesting player's authorized Game Engine state.
+- Used when entering the Game Page or restoring state.
+- Backend source: `GameService.getPlayerState()`.
+
+**Payload fields:**
+
+- `gameId`: Game identifier.
+- `phase`: Current GamePhase.
+- `roundNumber`: Current round.
+- `phaseEndsAt`: ISO deadline or null.
+- `players`: Public participant information:
+  - `userId`
+  - `participationStatus`: ACTIVE, ELIMINATED, DEPARTED
+  - `connectionStatus`: CONNECTED, DISCONNECTED
+- `role`: Requesting player's own role (SPY or DETECTIVE).
+- `secretWord?`: Only included for the requesting Detective.
+- `clues`: Accepted clues from the current round.
+- `hasSubmittedClue`: Whether the player submitted a clue.
+- `hasSubmittedVote`: Whether the player voted this round.
+- `finalResult`: ClientGameResult or null.
+
+**Security:**
+
+- Other players' secret roles are never included in `players`.
+- Individual vote choices are never included.
+- The Spy does not receive `secretWord` during gameplay.
+- After FINISHED, `finalResult` contains the final revelation.
+- After TERMINATED, `finalResult.revelation` is null.
+
+**Implementation status:**
+
+- The GameService state and privacy rules are implemented.
+- Socket.IO delivery is pending Gateway integration.
 
 **Event: `game.phase_changed` — Public**
 
@@ -75,7 +99,7 @@
   - `gameId`
   - `roundNumber`
   - `outcome`: `ELIMINATED`, `TIE`, or `NO_VOTES`
-  - `eliminatedPlayerId`: Player ID or null.
+  - `eliminatedUserId`: Eliminated user's ID or null.
   - `eliminatedRole`: `SPY`, `DETECTIVE`, or null.
 - An eliminated player's role is revealed only after elimination.
 - Individual votes and complete vote totals are not broadcast.
@@ -83,26 +107,62 @@
 
 **Event: `game.player_updated` — Public**
 
-- Sent when a participant's connection or participation status changes.
-- Includes:
+- Sent when a player's connection or participation status changes.
+- Always includes:
   - `gameId`
   - `userId`
-  - `participationStatus`: `ACTIVE`, `ELIMINATED`, or `DEPARTED`
-  - `connectionStatus`: `CONNECTED` or `DISCONNECTED`
-- Temporary disconnection does not change an active player's eligibility to receive votes.
-- This event does not reveal secret roles.
+
+**Connection update:**
+- `connectionStatus`: CONNECTED or DISCONNECTED.
+
+**Participation update:**
+- `participationStatus`: ELIMINATED or DEPARTED.
+
+- Each event contains the status field that changed.
+- A temporarily disconnected player remains an eligible voting target.
+- No secret roles are revealed by this event.
 
 **Event: `game.ended` — Public**
 
-- Sent after M1 finalizes a game.
-- Includes:
-  - `gameId`
-  - `status`: `FINISHED` or `TERMINATED`
-  - `winner`: `DETECTIVES`, `SPY`, or null.
-  - `reason`: Termination reason or null.
-- For `FINISHED`, the event also contains the Spy's identity and secret word for the final revelation.
-- For `TERMINATED`, secret roles and the secret word remain hidden.
-- M3 displays the final result and disables further gameplay inputs.
+- Published by M1 after game finalization.
+- Existing internal payload: `GameFinalResult`.
+
+**Fields:**
+- `gameId`
+- `roomId`
+- `status`: FINISHED or TERMINATED
+- `winner`: SPY, DETECTIVES, or null
+- `reason`: SPY_DEPARTED, INSUFFICIENT_PLAYERS, or null
+- `endedAt`: ISO timestamp
+
+**Final revelation:**
+
+- M1 also provides a frontend-specific `ClientGameResult`
+  through the authorized private player state.
+
+- When `status` is FINISHED:
+  - `revelation.spyUserId`: Spy's user ID.
+  - `revelation.secretWord`: The secret word.
+
+- When `status` is TERMINATED:
+  - `winner` is null.
+  - `revelation` is null.
+  - No new secret information is revealed.
+
+**Frontend behavior:**
+
+- M3 displays the final result and disables gameplay actions.
+- An authorized participant can retrieve `finalResult`
+  through `GameService.getPlayerState()`.
+- The Gateway will later handle delivery through `game.get_state`.
+- The existing internal `game.ended` event does not yet
+  include the frontend revelation payload.
+
+**Implementation status:**
+
+- Internal game.ended event: Implemented.
+- ClientGameResult generation: Implemented and tested.
+- WebSocket delivery of the final result: Pending.
 
 ## 4. Client-to-Server Actions
 
@@ -151,21 +211,71 @@
 - M3 does not supply a trusted voter or clue-author ID.
 - Client-supplied user IDs cannot be used to impersonate other players.
 
-## 5. Action Acknowledgements
+## 5. Action Acknowledgements and Errors
 
-- Clue and vote actions use Socket.IO acknowledgements.
-- A successful acknowledgement confirms that the server accepted the action.
-- A rejected action returns an error code without changing gameplay state.
-- Proposed common error codes:
-  - `UNAUTHORIZED`
-  - `NOT_GAME_PARTICIPANT`
-  - `PLAYER_NOT_ELIGIBLE`
-  - `INVALID_PHASE`
-  - `PHASE_EXPIRED`
-  - `ALREADY_SUBMITTED`
-  - `INVALID_CLUE`
-  - `INVALID_TARGET`
-  - `GAME_NOT_ACTIVE`
+**Agreed response format**
+
+Success:
+
+```json
+{
+  "ok": true
+}
+```
+
+Failure:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "CLUE_ALREADY_SUBMITTED",
+    "message": "You already submitted a clue this round."
+  }
+}
+```
+
+**Types:**
+
+- `GameActionResponse`
+- `GameActionErrorCode`
+
+**Supported client error codes:**
+
+- `UNAUTHORIZED`
+- `GAME_NOT_FOUND`
+- `NOT_GAME_PARTICIPANT`
+- `GAME_NOT_ACTIVE`
+- `PLAYER_NOT_ELIGIBLE`
+- `VOTER_NOT_ELIGIBLE`
+- `INVALID_PHASE`
+- `PHASE_EXPIRED`
+- `INVALID_CLUE`
+- `EMPTY_CLUE`
+- `CLUE_TOO_LONG`
+- `DUPLICATE_CLUE`
+- `CLUE_ALREADY_SUBMITTED`
+- `INVALID_VOTE_REQUEST`
+- `INVALID_VOTE_TARGET`
+- `VOTE_ALREADY_SUBMITTED`
+- `INVALID_REQUEST`
+- `ACTION_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+**Error handling:**
+
+- The Game Engine keeps its existing validation errors.
+- `toGameActionFailure()` maps errors into safe client responses.
+- Unexpected internal errors return `INTERNAL_ERROR`.
+- Internal database details are never exposed to the frontend.
+- M3 displays the returned error message.
+- Failed actions must not create accepted clues or votes.
+
+**Implementation status:**
+
+- Response types: Implemented.
+- Error mapper: Implemented and tested.
+- Socket.IO acknowledgement delivery: Pending Gateway integration.
 
 ## 6. Reconnection and State Restoration
 
@@ -178,6 +288,12 @@
 - Previously accepted clues and votes remain valid.
 - Reconnection does not restart timers or allow additional actions.
 - No separate reconnection countdown or event-replay system is required.
+- `game.state` restores `hasSubmittedClue` and `hasSubmittedVote`.
+- Previously submitted votes remain private.
+- `getPlayerState()` can retrieve the final result after game completion.
+- FINISHED games include final revelation in `finalResult`.
+- TERMINATED games do not include final revelation.
+- State restoration does not restart timers or create a new round.
 
 ## 7. Event Ordering and Synchronization
 
@@ -200,16 +316,21 @@
 - **M4:** Room start/leave events, room membership, and room-state updates and safe cleanup after game finalization.
 - **M5:** WebSocket authentication, secure connections and connection-lifecycle infrastructure.
 
-## 9. Unconfirmed Integration Decisions
+## 9. Integration Decisions and Pending Work
 
 | ID | Decision | Proposed Default | Owner | Status |
 |---|---|---|---|---|
-| E1 | Exact event and action names | Names in this document | M1 + M3 | Open |
-| E2 | Public game subscription mechanism | Authorized Socket.IO game room | M1 + M3 + M5 | Open |
-| E3 | Private player-state delivery | Authenticated player-specific event | M1 + M3 + M5 | Open |
-| E4 | Initial game screen navigation after M4 starts a game | M4 notifies room; M3 retrieves game state | M3 + M4 | Open |
-| E5 | Chat phase-eligibility integration | M2 checks M1-authoritative eligibility | M1 + M2 | Open |
-| E6 | Reconnection and player-online detection | Authenticated Socket.IO lifecycle | M1 + M5 | Open |
-| E7 | Exact error-code format | Common codes above | M1 + M3 | Open |
+| E1 | Event/action names and payload fields | Names in this document | M1 + M3 | Agreed M1–M3 |
+| E2 | Authorized public Socket.IO room | Authorized Socket.IO game room | M1 + M3 + M5 | Pending Gateway |
+| E3 | Private game.state delivery| Authenticated player-specific event | M1 + M3 + M5 | Pending Gateway |
+| E4 | Navigation after M4 starts a game | M4 notifies room; M3 retrieves game state | M3 + M4 | Pending M3/M4 integration |
+| E5 | Chat phase eligibility | M2 checks M1-authoritative eligibility | M1 + M2 | Pending M1/M2 integration |
+| E6 | WebSocket reconnection lifecycle | Authenticated Socket.IO lifecycle | M1 + M5 | Pending Gateway |
+| E7 | Action response and error format | Common codes above | M1 + M3 | Implemented and agreed M1–M3 |
 
-**Due dates:** To be assigned or updated by the team before integration. No unconfirmed decision is represented as agreed.
+**Due dates:** M1's frontend-facing Game Engine data contracts are finalized.
+
+Remaining integration decisions concern Socket.IO delivery,
+room navigation, chat eligibility, and connection lifecycle.
+
+No Gateway or frontend delivery is claimed as implemented.

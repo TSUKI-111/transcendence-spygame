@@ -13,6 +13,7 @@ import type {AcceptedClue} from "./contracts/clue.interface.ts";
 import type {RoundResolutionResult} from "./contracts/round-resolution.interface.ts";
 import type {GameFinalResult} from "./contracts/game-final-result.interface.ts";
 import type {LeaveGameResult} from "./contracts/leave-game-result.interface.ts";
+import type {ClientGameResult} from "./contracts/client-game-result.interface.ts";
 
 // Predefined backend word list for the game
 const SECRET_WORDS = ["apple", "banana", "cherry", "ocean", "mountain", "river", "forest", "desert", "city", "village", "pizza", "pasta", "burger"];
@@ -177,6 +178,22 @@ export class GameService
 				currentRoundNumber: true,
 				phaseEndsAt: true,
 				secretWord: true,
+
+				// Information needed when the game ends
+				winner: true,
+				terminationReason: true,
+				endedAt: true,
+
+				players:
+				{
+					select:
+					{
+						userId: true,
+						role: true,
+						participationStatus: true,
+						connectionStatus: true,
+					},
+				},
 			},
 		});
 		if (!game)
@@ -197,6 +214,7 @@ export class GameService
 			},
 			select:
 			{
+				id: true,
 				role: true,
 			},
 		});
@@ -233,6 +251,18 @@ export class GameService
 						},
 					},
 				},
+				votes:
+				{
+					where:
+					{
+						voterGamePlayerId: player.id,
+					},
+					select:
+					{
+						id: true,
+					},
+					take: 1,
+				}
 			},
 		});
 
@@ -250,6 +280,49 @@ export class GameService
 			clue: c.text,
 		}));
 
+		// Build the frontend result only when the game has ended
+		let finalResult: ClientGameResult | null = null;
+
+		if (game.phase === "FINISHED")
+		{
+			const spy = game.players.find(p => p.role === "SPY");
+			if (!spy || !game.winner || !game.endedAt)
+			{
+				throw new Error("INVALID_GAME_STATE");
+			}
+
+			finalResult = 
+			{
+				gameId : game.id,
+				status: "FINISHED",
+				winner: game.winner,
+				reason: null,
+				endedAt: game.endedAt.toISOString(),
+				revelation:
+				{
+					spyUserId: spy.userId,
+					secretWord: game.secretWord,
+				},
+			};
+		}
+		else if (game.phase === "TERMINATED")
+		{
+			if (!game.terminationReason || !game.endedAt)
+			{
+				throw new Error("INVALID_FINAL_STATE");
+			}
+
+			finalResult = 
+			{
+				gameId : game.id,
+				status: "TERMINATED",
+				winner: null,
+				reason: game.terminationReason,
+				endedAt: game.endedAt.toISOString(),
+				revelation: null,
+			};
+		}
+
 		// Build a safe response for this player
 		const state: PlayerGameState =
 		{
@@ -257,9 +330,17 @@ export class GameService
 			phase: game.phase,
 			roundNumber: game.currentRoundNumber,
 			phaseEndsAt: game.phaseEndsAt?.toISOString() ?? null,
+			players: game.players.map(p => (
+			{
+				userId: p.userId,
+				participationStatus: p.participationStatus,
+				connectionStatus: p.connectionStatus,
+			})),
 			role: player.role,
 			clues,
 			hasSubmittedClue: clues.some(c => c.userId === userId),
+			hasSubmittedVote: round.votes.length > 0,
+			finalResult,
 		};
 
 		// Only Detectives receive the secret word
