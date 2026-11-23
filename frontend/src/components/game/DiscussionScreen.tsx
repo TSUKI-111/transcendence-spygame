@@ -9,7 +9,7 @@ type player = {
   avatarurl: string;
 };
 
-const currentuser = 3;
+// const currentuser = 3;
 
 const players: player[] = [
   { id: 1, name: "jhon", detective: true, avatarurl: ava },
@@ -20,7 +20,7 @@ const players: player[] = [
   { id: 6, name: "mark", detective: false, avatarurl: ava },
 ];
 
-const me = players.find((player) => player.id === currentuser);
+// const me = players.find((player) => player.id === currentuser);
 
 export default function DiscussionScreen() {
   type clue = { playerId: number; text: string };

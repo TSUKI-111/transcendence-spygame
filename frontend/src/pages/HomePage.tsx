@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import img from "../assets/detectives-victory.png";
 // import img from "../assets/spy_side_panel_2.png"

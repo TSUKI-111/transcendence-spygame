@@ -1,5 +1,4 @@
 import { useState } from "react";
-import img from "../../assets/spy.png";
 import ava from "../../assets/vite.svg";
 import type { SubmitEvent } from "react";
 

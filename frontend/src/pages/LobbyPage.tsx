@@ -35,7 +35,6 @@ function Slot({ player }: { player: Player | null }) {
 }
 
 export default function LobbyPage() {
-  const { roomId } = useParams();
   const navigate = useNavigate();
   const maxPlayers = 8;
 
