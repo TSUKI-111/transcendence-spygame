@@ -24,7 +24,7 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { RoomGateway } from '../src/rooms/room.gateway.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
 
-const TEST_DATABASE = 'spygame_m2_test';
+const TEST_DATABASE = 'transcendence_test';
 const ORIGIN = 'https://localhost:8443';
 const COOKIE_NAME = '__Host-spygame_session';
 
@@ -54,7 +54,7 @@ describe('Authentification Socket.IO — sessions réelles', () => {
       new URL(databaseUrl).pathname !== `/${TEST_DATABASE}`
     ) {
       throw new Error(
-        'Tests refusés : DATABASE_URL doit cibler spygame_m2_test',
+        'Tests refusés : DATABASE_URL doit cibler transcendence_test',
       );
     }
 
