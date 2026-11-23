@@ -21,17 +21,17 @@ jobs:
         env:
           POSTGRES_USER: transcendence
           POSTGRES_PASSWORD: transcendence
-          POSTGRES_DB: spygame_test
+          POSTGRES_DB: transcendence_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U transcendence -d spygame_test"
+          --health-cmd="pg_isready -U transcendence -d transcendence_test"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/spygame_test
+      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/transcendence_test
       APP_ORIGIN: https://localhost:8443
 
     steps:
@@ -77,7 +77,7 @@ jobs:
         env:
           POSTGRES_USER: transcendence
           POSTGRES_PASSWORD: transcendence
-          POSTGRES_DB: spygame_test
+          POSTGRES_DB: transcendence_test
         ports:
           - 5432:5432
         options: >-
@@ -87,7 +87,7 @@ jobs:
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/spygame_test
+      DATABASE_URL: postgresql://transcendence:transcendence@localhost:5432/transcendence_test
 
     steps:
       - name: Checkout repository

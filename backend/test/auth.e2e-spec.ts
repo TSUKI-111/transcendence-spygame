@@ -20,7 +20,7 @@ import { AuthModule } from '../src/auth/auth.module.js';
 import { CsrfOriginGuard } from '../src/auth/guards/csrf-origin.guard.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
-const TEST_DATABASE = 'spygame_test';
+const TEST_DATABASE = 'transcendence_test';
 const ORIGIN = 'https://localhost:8443';
 
 describe('Authentication — parcours complet', () => {
@@ -44,7 +44,7 @@ describe('Authentication — parcours complet', () => {
       new URL(connectionString).pathname !== `/${TEST_DATABASE}`
     ) {
       throw new Error(
-        'Tests refusés : DATABASE_URL doit cibler spygame_test',
+        'Tests refusés : DATABASE_URL doit cibler transcendence_test',
       );
     }
 
