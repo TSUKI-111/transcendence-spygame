@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoomsController } from './rooms.controller.js';
 import { RoomsService } from './rooms.service.js';
 import { NotFoundException } from '@nestjs/common';
+import { SessionAuthGuard } from '../auth/guards/session-auth.guard.js';
 
 describe('RoomsController', () => {
   let roomsController: RoomsController;
@@ -39,7 +40,10 @@ describe('RoomsController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(SessionAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     roomsController = moduleRef.get<RoomsController>(RoomsController);
   });
@@ -68,7 +72,7 @@ describe('RoomsController', () => {
   describe('create', () => {
     const dto = {
       name: 'Room Alpha',
-      max_players: 6,
+      maxPlayers: 6,
       is_private: false,
     };
 

@@ -9,20 +9,14 @@ import request from 'supertest';
 import { io } from 'socket.io-client';
 import type { Socket as ClientSocket } from 'socket.io-client';
 import type { Server } from 'socket.io';
-import {
-  afterAll,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AuthModule } from '../src/auth/auth.module.js';
 import { CsrfOriginGuard } from '../src/auth/guards/csrf-origin.guard.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { RoomGateway } from '../src/rooms/room.gateway.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
+import { RoomsService } from '../src/rooms/rooms.service.js';
 
 const TEST_DATABASE = 'transcendence_test';
 const ORIGIN = 'https://localhost:8443';
@@ -49,10 +43,7 @@ describe('Authentification Socket.IO — sessions réelles', () => {
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
 
-    if (
-      !databaseUrl ||
-      new URL(databaseUrl).pathname !== `/${TEST_DATABASE}`
-    ) {
+    if (!databaseUrl || new URL(databaseUrl).pathname !== `/${TEST_DATABASE}`) {
       throw new Error(
         'Tests refusés : DATABASE_URL doit cibler transcendence_test',
       );
@@ -65,6 +56,12 @@ describe('Authentification Socket.IO — sessions réelles', () => {
       providers: [
         RoomGateway,
         RoomEventsPublisher,
+        {
+          provide: RoomsService,
+          useValue: {
+            verifyPlayerMembership: vi.fn(),
+          },
+        },
         {
           provide: APP_GUARD,
           useClass: CsrfOriginGuard,
@@ -237,9 +234,7 @@ describe('Authentification Socket.IO — sessions réelles', () => {
   });
 
   it('S47 — refuse un token inconnu', async () => {
-    await expectRefused(
-      `${COOKIE_NAME}=${randomBytes(32).toString('hex')}`,
-    );
+    await expectRefused(`${COOKIE_NAME}=${randomBytes(32).toString('hex')}`);
   });
 
   it('refuse une origine externe avec une session valide', async () => {
