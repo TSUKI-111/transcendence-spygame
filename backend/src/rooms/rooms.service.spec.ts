@@ -99,6 +99,7 @@ describe('RoomsService', () => {
           provide: GameService,
           useValue: {
             startGame: gameStartMock,
+            leaveGame: gameLeaveMock,
           },
         },
         {
@@ -115,13 +116,6 @@ describe('RoomsService', () => {
             roomPlayer: {
               findUnique: roomPlayerFindUniqueMock,
             },
-          },
-        },
-        {
-          provide: GameService,
-          useValue: {
-            startGame: gameStartMock,
-            leaveGame: gameLeaveMock,
           },
         },
       ],

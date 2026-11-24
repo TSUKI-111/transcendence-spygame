@@ -8,6 +8,8 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 
 import { RoomsService } from '../src/rooms/rooms.service.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
+import { GameService } from '../src/game/game.service.js';
+import { GameEventsService } from '../src/game/game-events.service.js';
 
 const TEST_DATABASE_NAME = 'transcendence_test';
 
@@ -20,6 +22,7 @@ interface TestFixture {
 let prisma: PrismaService | undefined;
 let roomsService: RoomsService | undefined;
 let databaseConnected = false;
+let gameService: GameService | undefined;
 
 const fixtures: TestFixture[] = [];
 
@@ -53,8 +56,19 @@ describe('RoomsService - Leave room integration', () => {
     await db.$connect();
     databaseConnected = true;
 
+    const gameEventsService = new GameEventsService();
+    const gameServiceInstance = new GameService(db, gameEventsService);
+
+    gameService = gameServiceInstance;
+
     const roomEventsPublisher = new RoomEventsPublisher();
-    roomsService = new RoomsService(db, roomEventsPublisher);
+
+    roomsService = new RoomsService(
+      db,
+      roomEventsPublisher,
+      gameServiceInstance,
+      gameEventsService,
+    );
   });
   it('should remove a normal player from a WAITING room', async () => {
     const db = prisma;
@@ -310,11 +324,13 @@ describe('RoomsService - Leave room integration', () => {
 
     expect(remainingPlayers).toBe(0);
   });
+
   it('should allow a player to leave an IN_GAME room', async () => {
     const db = prisma;
     const service = roomsService;
+    const game = gameService;
 
-    if (!db || !service) {
+    if (!db || !service || !game) {
       throw new Error('Test dependencies are not initialized');
     }
 
@@ -326,6 +342,7 @@ describe('RoomsService - Leave room integration', () => {
 
     fixtures.push(fixture);
 
+    // 1. Create the host.
     const host = await db.user.create({
       data: {
         username: `ingame_${runId}_host`,
@@ -337,33 +354,70 @@ describe('RoomsService - Leave room integration', () => {
 
     fixture.hostId = host.id;
 
-    const player = await db.user.create({
-      data: {
-        username: `ingame_${runId}_player`,
-        displayName: 'In Game Player',
-        email: `ingame_${runId}_player@test.local`,
-        passwordHash: 'integration-test-hash',
-      },
-    });
+    // 2. Create three additional players.
+    for (let i = 1; i <= 3; i++) {
+      const player = await db.user.create({
+        data: {
+          username: `ingame_${runId}_player${i}`,
+          displayName: `In Game Player ${i}`,
+          email: `ingame_${runId}_player${i}@test.local`,
+          passwordHash: 'integration-test-hash',
+        },
+      });
 
-    fixture.playerIds.push(player.id);
+      fixture.playerIds.push(player.id);
+    }
 
+    // 3. Create a WAITING room with four participants.
     const room = await db.room.create({
       data: {
         name: `In Game Test ${runId}`,
         hostId: host.id,
         maxPlayers: 8,
-        status: 'IN_GAME',
+        status: 'WAITING',
         isPrivate: false,
         players: {
-          create: [{ userId: host.id }, { userId: player.id }],
+          create: [
+            { userId: host.id },
+            ...fixture.playerIds.map((userId) => ({ userId })),
+          ],
         },
       },
     });
 
     fixture.roomId = room.id;
 
-    const result = await service.leaveRoom(room.id, player.id);
+    // 4. Start a real game.
+    const startedGame = await game.startGame({
+      roomId: room.id,
+      participantIds: [host.id, ...fixture.playerIds],
+    });
+
+    // 5. Select a Detective dynamically (never assume the random role).
+    const detective = await db.gamePlayer.findFirst({
+      where: {
+        gameId: startedGame.gameId,
+        role: 'DETECTIVE',
+      },
+      select: {
+        userId: true,
+      },
+    });
+
+    expect(detective).not.toBeNull();
+
+    if (!detective) {
+      throw new Error('No Detective was assigned to the game');
+    }
+
+    // 6. Mark the room as IN_GAME.
+    await db.room.update({
+      where: { id: room.id },
+      data: { status: 'IN_GAME' },
+    });
+
+    // 7. Make the Detective leave.
+    const result = await service.leaveRoom(room.id, detective.userId);
 
     expect(result.roomDeleted).toBe(false);
 
@@ -371,7 +425,8 @@ describe('RoomsService - Leave room integration', () => {
       throw new Error('Room should not have been deleted');
     }
 
-    expect(result.room?.players).toHaveLength(1);
+    // 8. Verify the room still exists with three players.
+    expect(result.room?.players).toHaveLength(3);
 
     const updatedRoom = await db.room.findUnique({
       where: { id: room.id },
@@ -379,17 +434,27 @@ describe('RoomsService - Leave room integration', () => {
 
     expect(updatedRoom?.status).toBe('IN_GAME');
 
+    // 9. Verify the player was removed from the room.
     const membership = await db.roomPlayer.findUnique({
       where: {
         roomId_userId: {
           roomId: room.id,
-          userId: player.id,
+          userId: detective.userId,
         },
       },
     });
 
     expect(membership).toBeNull();
+
+    // 10. Verify the game is still active.
+    const updatedGame = await db.game.findUnique({
+      where: { id: startedGame.gameId },
+      select: { phase: true },
+    });
+
+    expect(updatedGame?.phase).not.toBe('TERMINATED');
   });
+
   it('should reject leaving when user is not a member', async () => {
     const db = prisma;
     const service = roomsService;
@@ -564,6 +629,44 @@ describe('RoomsService - Leave room integration', () => {
       if (databaseConnected) {
         for (const fixture of fixtures) {
           if (fixture.roomId) {
+            const games = await db.game.findMany({
+              where: { roomId: fixture.roomId },
+              select: { id: true },
+            });
+
+            const gameIds = games.map((game) => game.id);
+
+            if (gameIds.length > 0) {
+              const rounds = await db.gameRound.findMany({
+                where: { gameId: { in: gameIds } },
+                select: { id: true },
+              });
+
+              const roundIds = rounds.map((round) => round.id);
+
+              if (roundIds.length > 0) {
+                await db.vote.deleteMany({
+                  where: { roundId: { in: roundIds } },
+                });
+
+                await db.clue.deleteMany({
+                  where: { roundId: { in: roundIds } },
+                });
+              }
+
+              await db.gameRound.deleteMany({
+                where: { gameId: { in: gameIds } },
+              });
+
+              await db.gamePlayer.deleteMany({
+                where: { gameId: { in: gameIds } },
+              });
+
+              await db.game.deleteMany({
+                where: { id: { in: gameIds } },
+              });
+            }
+
             await db.roomPlayer.deleteMany({
               where: { roomId: fixture.roomId },
             });
