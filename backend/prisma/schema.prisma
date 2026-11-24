@@ -31,6 +31,8 @@ model User {
   sessions Session[]
   chatMessages ChatMessage[]
   gamePlayers GamePlayer[]
+  sentFriendRequests     Friendship[] @relation("FriendshipRequester")
+  receivedFriendRequests Friendship[] @relation("FriendshipRecipient")
 
   @@map("users")
 }
@@ -181,6 +183,24 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
+model Friendship{
+  id          Int                 @id @default(autoincrement())
+  requesterId Int
+  recipientId Int
+  status      FriendshipStatus    @default(PENDING)
+  createdAt   DateTime            @default(now())
+  acceptedAt  DateTime?
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User @relation("FriendshipRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId, status])
+  @@index([recipientId, status])
+  @@map("friendships")
+
+
+}
+
 
 enum RoomStatus {
   WAITING
@@ -232,4 +252,9 @@ enum RoundOutcome {
 enum ChatChannel {
   LOBBY
   DISCUSSION
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
 }
