@@ -72,7 +72,7 @@ describe('RoomsController', () => {
   describe('create', () => {
     const dto = {
       name: 'Room Alpha',
-      max_players: 6,
+      maxPlayers: 6,
       is_private: false,
     };
 

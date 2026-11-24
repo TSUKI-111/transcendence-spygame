@@ -121,7 +121,7 @@ describe('RoomsController (e2e)', () => {
       .post('/rooms')
       .send({
         name: 'Soirée espions',
-        max_players: 6,
+        maxPlayers: 6,
         is_private: false,
       })
       .expect(201);
@@ -161,7 +161,7 @@ describe('RoomsController (e2e)', () => {
       .post('/rooms')
       .send({
         name: 'Salon privé',
-        max_players: 4,
+        maxPlayers: 4,
         is_private: true,
       })
       .expect(201);
@@ -200,7 +200,7 @@ describe('RoomsController (e2e)', () => {
       .post('/rooms')
       .send({
         name: 'ab',
-        max_players: 6,
+        maxPlayers: 6,
         is_private: false,
       })
       .expect(400);
@@ -214,7 +214,7 @@ describe('RoomsController (e2e)', () => {
       .post('/rooms')
       .send({
         name: 'Soirée espions',
-        max_players: 9,
+        maxPlayers: 9,
         is_private: false,
       })
       .expect(400);
@@ -231,7 +231,7 @@ describe('RoomsController (e2e)', () => {
       .post('/rooms')
       .send({
         name: 'Autre salon',
-        max_players: 6,
+        maxPlayers: 6,
         is_private: false,
       })
       .expect(409);

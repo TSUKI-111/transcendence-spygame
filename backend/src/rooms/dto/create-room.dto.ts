@@ -1,4 +1,14 @@
-import {IsInt, IsString, MinLength, MaxLength, Max, Min, IsBoolean, IsOptional, Matches} from 'class-validator'
+import {
+  IsInt,
+  IsString,
+  MinLength,
+  MaxLength,
+  Max,
+  Min,
+  IsBoolean,
+  IsOptional,
+  Matches,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -9,11 +19,11 @@ export class CreateRoomDto {
     minLength: 3,
     maxLength: 30,
   })
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.trim() : value
-  )
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @Matches(/\S/, {message: 'name must contain at least one non-whitespace character'})
+  @Matches(/\S/, {
+    message: 'name must contain at least one non-whitespace character',
+  })
   @MaxLength(30)
   @MinLength(3)
   name: string;
@@ -29,7 +39,7 @@ export class CreateRoomDto {
   @IsInt()
   @Max(8)
   @Min(3)
-  max_players: number = 8;
+  maxPlayers: number = 8;
 
   @ApiPropertyOptional({
     example: false,

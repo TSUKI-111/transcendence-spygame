@@ -13,6 +13,8 @@ import {
 import { Prisma } from '../generated/prisma/client.js';
 import { RoomEventsPublisher } from './events/room-events.publisher.js';
 import type { RoomEvent } from './events/room-events.types.js';
+import { GameService } from '../game/game.service.js';
+import { GameEventsService } from '../game/game-events.service.js';
 
 describe('RoomsService', () => {
   let roomsService: RoomsService;
@@ -45,6 +47,8 @@ describe('RoomsService', () => {
   let roomDeleteMock: ReturnType<typeof vi.fn>;
   let roomUpdateMock: ReturnType<typeof vi.fn>;
   let roomEventsPublisher: RoomEventsPublisher;
+  let gameStartMock: ReturnType<typeof vi.fn>;
+  let gameLeaveMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     findManyMock = vi.fn();
@@ -59,6 +63,13 @@ describe('RoomsService', () => {
     roomPlayerDeleteMock = vi.fn();
     roomDeleteMock = vi.fn();
     roomUpdateMock = vi.fn();
+    gameStartMock = vi.fn().mockResolvedValue({
+      gameId: '00000000-0000-4000-8000-000000000099',
+      roomId: '00000000-0000-4000-8000-000000000001',
+      phase: 'CLUE_SUBMISSION',
+      roundNumber: 1,
+      phaseEndsAt: '2026-11-22T19:00:00.000Z',
+    });
 
     txMock = {
       $queryRaw: queryRawMock,
@@ -75,6 +86,7 @@ describe('RoomsService', () => {
         delete: roomPlayerDeleteMock,
       },
     };
+    gameLeaveMock = vi.fn().mockResolvedValue({});
 
     transactionMock = vi.fn(async (callback) => callback(txMock));
 
@@ -82,18 +94,34 @@ describe('RoomsService', () => {
       providers: [
         RoomsService,
         RoomEventsPublisher,
+        GameEventsService,
+        {
+          provide: GameService,
+          useValue: {
+            startGame: gameStartMock,
+          },
+        },
         {
           provide: PrismaService,
           useValue: {
             $transaction: transactionMock,
+
             room: {
               findMany: findManyMock,
               findUnique: findUniqueMock,
               create: createMock,
             },
+
             roomPlayer: {
               findUnique: roomPlayerFindUniqueMock,
             },
+          },
+        },
+        {
+          provide: GameService,
+          useValue: {
+            startGame: gameStartMock,
+            leaveGame: gameLeaveMock,
           },
         },
       ],
@@ -297,7 +325,7 @@ describe('RoomsService', () => {
     it('should create a public room', async () => {
       const dto: CreateRoomDto = {
         name: 'Room publique',
-        max_players: 8,
+        maxPlayers: 8,
         is_private: false,
       };
 
@@ -347,7 +375,7 @@ describe('RoomsService', () => {
     it('should create a private room with an invitation code', async () => {
       const dto = {
         name: 'Room privée',
-        max_players: 4,
+        maxPlayers: 4,
         is_private: true,
       };
 
@@ -393,7 +421,7 @@ describe('RoomsService', () => {
     it('should throw an error when Prisma fails', async () => {
       const dto = {
         name: 'Room publique',
-        max_players: 8,
+        maxPlayers: 8,
         is_private: false,
       };
 
@@ -415,7 +443,7 @@ describe('RoomsService', () => {
 
       const dto: CreateRoomDto = {
         name: 'Another Room',
-        max_players: 6,
+        maxPlayers: 6,
         is_private: false,
       };
 
@@ -1096,24 +1124,13 @@ describe('RoomsService', () => {
           { id: 3, displayName: 'Player 3' },
         ],
         playersCount: 3,
-      });
-      expect(result).toEqual({
-        id: roomId,
-        name: 'Room Alpha',
-        host: {
-          id: 1,
-          displayName: 'Host',
+        game: {
+          gameId: '00000000-0000-4000-8000-000000000099',
+          roomId: '00000000-0000-4000-8000-000000000001',
+          phase: 'CLUE_SUBMISSION',
+          roundNumber: 1,
+          phaseEndsAt: '2026-11-22T19:00:00.000Z',
         },
-        maxPlayers: 8,
-        status: 'IN_GAME',
-        isPrivate: false,
-        createdAt: new Date('2026-01-01T10:00:00.000Z'),
-        players: [
-          { id: 1, displayName: 'Host' },
-          { id: 2, displayName: 'Player 2' },
-          { id: 3, displayName: 'Player 3' },
-        ],
-        playersCount: 3,
       });
     });
 
@@ -1180,6 +1197,11 @@ describe('RoomsService', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      findUniqueMock.mockResolvedValue({
+        id: roomId,
+        status: 'WAITING',
+        game: null,
+      });
 
       queryRawMock.mockResolvedValue([{ id: roomId }]);
 
@@ -1357,6 +1379,23 @@ describe('RoomsService', () => {
       );
 
       expect(roomUpdateMock).not.toHaveBeenCalled();
+    });
+
+    it('should reject a non-member before notifying the game service', async () => {
+      findUniqueMock.mockResolvedValueOnce({
+        id: roomId,
+        status: 'IN_GAME',
+        game: { id: 'game-id' },
+      });
+
+      roomPlayerFindUniqueMock.mockResolvedValueOnce(null);
+
+      await expect(roomsService.leaveRoom(roomId, playerId)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(gameLeaveMock).not.toHaveBeenCalled();
+      expect(transactionMock).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException when Prisma returns P2034', async () => {
