@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoomsService } from '../src/rooms/rooms.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
+import { GameService } from '../src/game/game.service.js';
+import { GameEventsService } from '../src/game/game-events.service.js';
 
 describe('RoomsService', () => {
   let roomsService: RoomsService;
@@ -28,6 +30,19 @@ describe('RoomsService', () => {
             publishPlayerJoined: vi.fn(),
             publishPlayerLeft: vi.fn(),
             publishHostChanged: vi.fn(),
+          },
+        },
+        {
+          provide: GameService,
+          useValue: {
+            startGame: vi.fn(),
+            leaveGame: vi.fn(),
+          },
+        },
+        {
+          provide: GameEventsService,
+          useValue: {
+            subscribe: vi.fn(() => vi.fn()),
           },
         },
       ],

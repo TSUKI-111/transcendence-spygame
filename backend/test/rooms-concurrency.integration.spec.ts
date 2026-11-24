@@ -5,6 +5,8 @@ import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { RoomsService } from '../src/rooms/rooms.service.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
+import { GameService } from '../src/game/game.service.js';
+import { GameEventsService } from '../src/game/game-events.service.js';
 
 const ROUND_COUNT = 5;
 const CANDIDATE_COUNT = 8;
@@ -59,8 +61,17 @@ describe('RoomsService - PostgreSQL concurrency integration', () => {
     databaseConnected = true;
 
     // 3. Initialiser le vrai RoomsService.
+    const gameEventsService = new GameEventsService();
+    const gameService = new GameService(db, gameEventsService);
+
     const roomEventsPublisher = new RoomEventsPublisher();
-    roomsService = new RoomsService(db, roomEventsPublisher);
+
+    roomsService = new RoomsService(
+      db,
+      roomEventsPublisher,
+      gameService,
+      gameEventsService,
+    );
 
     // Identifiant aléatoire pour éviter les collisions entre exécutions.
     const runId = randomBytes(6).toString('hex');
@@ -208,6 +219,64 @@ describe('RoomsService - PostgreSQL concurrency integration', () => {
           ];
 
           // 2. Supprimer d'abord les associations room-player.
+
+          // 2. Supprimer les données des jeux associés aux rooms.
+          const games = await db.game.findMany({
+            where: {
+              roomId: { in: roomIds },
+            },
+            select: { id: true },
+          });
+
+          const gameIds = games.map((game) => game.id);
+
+          if (gameIds.length > 0) {
+            const rounds = await db.gameRound.findMany({
+              where: {
+                gameId: { in: gameIds },
+              },
+              select: { id: true },
+            });
+
+            const roundIds = rounds.map((round) => round.id);
+
+            // Les votes et les indices dépendent des rounds et des joueurs.
+            if (roundIds.length > 0) {
+              await attemptCleanup('votes cleanup', () =>
+                db.vote.deleteMany({
+                  where: { roundId: { in: roundIds } },
+                }),
+              );
+
+              await attemptCleanup('clues cleanup', () =>
+                db.clue.deleteMany({
+                  where: { roundId: { in: roundIds } },
+                }),
+              );
+            }
+
+            // Les rounds peuvent référencer un GamePlayer éliminé.
+            await attemptCleanup('game rounds cleanup', () =>
+              db.gameRound.deleteMany({
+                where: { gameId: { in: gameIds } },
+              }),
+            );
+
+            await attemptCleanup('game players cleanup', () =>
+              db.gamePlayer.deleteMany({
+                where: { gameId: { in: gameIds } },
+              }),
+            );
+
+            await attemptCleanup('games cleanup', () =>
+              db.game.deleteMany({
+                where: { id: { in: gameIds } },
+              }),
+            );
+          }
+
+          // 3. Supprimer les associations room-player.
+
           for (const currentRoomId of roomIds) {
             await attemptCleanup(`roomPlayer cleanup (${currentRoomId})`, () =>
               db.roomPlayer.deleteMany({

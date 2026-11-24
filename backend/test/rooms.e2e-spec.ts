@@ -10,6 +10,9 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { SessionAuthGuard } from '../src/auth/guards/session-auth.guard.js';
 import { RoomEventsPublisher } from '../src/rooms/events/room-events.publisher.js';
 
+import { GameService } from '../src/game/game.service.js';
+import { GameEventsService } from '../src/game/game-events.service.js';
+
 describe('RoomsController (e2e)', () => {
   let app: INestApplication<App>;
   const transactionClient = {
@@ -64,6 +67,25 @@ describe('RoomsController (e2e)', () => {
             publishPlayerJoined: vi.fn(),
             publishPlayerLeft: vi.fn(),
             publishHostChanged: vi.fn(),
+          },
+        },
+        {
+          provide: GameService,
+          useValue: {
+            startGame: vi.fn().mockResolvedValue({
+              gameId: '00000000-0000-4000-8000-000000000099',
+              roomId: '550e8400-e29b-41d4-a716-446655440000',
+              phase: 'CLUE_SUBMISSION',
+              roundNumber: 1,
+              phaseEndsAt: '2026-11-24T12:00:00.000Z',
+            }),
+            leaveGame: vi.fn().mockResolvedValue({}),
+          },
+        },
+        {
+          provide: GameEventsService,
+          useValue: {
+            subscribe: vi.fn(() => vi.fn()),
           },
         },
       ],
