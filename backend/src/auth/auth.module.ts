@@ -6,6 +6,7 @@ import { RequireUserGuard } from './guards/require-user.guard.js';
 import { SessionAuthGuard } from './guards/session-auth.guard.js';
 import { PasswordService } from './password.service.js';
 import { SessionService } from './session.service.js';
+import { WsSessionAuthService } from './ws-session-auth.service.js';
 
 @Module({
   imports: [PrismaModule],
@@ -16,7 +17,8 @@ import { SessionService } from './session.service.js';
     SessionAuthGuard,
     PasswordService,
     SessionService,
+    WsSessionAuthService,
   ],
-  exports: [RequireUserGuard, SessionAuthGuard, SessionService],
+  exports: [RequireUserGuard, SessionAuthGuard, SessionService, WsSessionAuthService],
 })
 export class AuthModule {}

@@ -592,5 +592,270 @@ it('rejects a vote when another transaction changes the phase', async () => {
   expect(voteCount).toBe(0);
 });
 
+
+it('persists a Detective victory when the Spy disconnects before resolution', async () => {
+  const { users, room } = await createFixture();
+
+  const started = await service.startGame({
+    roomId: room.id,
+    participantIds: users.map(user => user.id),
+  });
+
+  const players = await prisma.gamePlayer.findMany({
+    where: { gameId: started.gameId },
+  });
+
+  const spy = players.find(p => p.role === 'SPY')!;
+  const detectives = players.filter(p => p.role === 'DETECTIVE');
+
+  // Enter voting with time remaining.
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phase: 'VOTING',
+      phaseEndsAt: new Date(Date.now() + 60_000),
+    },
+  });
+
+  // Both Detectives vote for the Spy.
+  for (const detective of detectives) {
+    await service.submitVote(
+      started.gameId,
+      detective.userId,
+      spy.userId,
+    );
+  }
+
+  // The Spy loses their connection before resolution.
+  await service.markDisconnected(started.gameId, spy.userId);
+
+  // Expire the voting deadline.
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phaseEndsAt: new Date(Date.now() - 1000),
+    },
+  });
+
+  const result = await service.resolveRound(started.gameId);
+
+  // Voting must take priority over disconnection.
+  expect(result.outcome).toBe('ELIMINATED');
+  expect(result.eliminatedUserId).toBe(spy.userId);
+  expect(result.nextPhase).toBe('FINISHED');
+  expect(result.finalResult?.winner).toBe('DETECTIVES');
+  expect(result.departedUserIds).toEqual([]);
+
+  // Verify what PostgreSQL actually saved.
+  const savedSpy = await prisma.gamePlayer.findUnique({
+    where: { id: spy.id },
+  });
+
+  expect(savedSpy?.participationStatus).toBe('ELIMINATED');
+
+  const savedGame = await prisma.game.findUnique({
+    where: { id: started.gameId },
+  });
+
+  expect(savedGame?.phase).toBe('FINISHED');
+  expect(savedGame?.winner).toBe('DETECTIVES');
+  expect(savedGame?.terminationReason).toBeNull();
+
+  const savedRound = await prisma.gameRound.findUnique({
+    where: {
+      gameId_number: {
+        gameId: started.gameId,
+        number: 1,
+      },
+    },
+  });
+
+  expect(savedRound?.outcome).toBe('ELIMINATED');
+  expect(savedRound?.eliminatedGamePlayerId).toBe(spy.id);
+});
+
+
+it('persists a tie before terminating for Spy disconnection', async () => {
+  const { users, room } = await createFixture();
+
+  const started = await service.startGame({
+    roomId: room.id,
+    participantIds: users.map(user => user.id),
+  });
+
+  const players = await prisma.gamePlayer.findMany({
+    where: { gameId: started.gameId },
+  });
+
+  const spy = players.find(p => p.role === 'SPY')!;
+  const detectives = players.filter(p => p.role === 'DETECTIVE');
+
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phase: 'VOTING',
+      phaseEndsAt: new Date(Date.now() + 60_000),
+    },
+  });
+
+  // One vote for the Spy and one for a Detective.
+  await service.submitVote(
+    started.gameId,
+    detectives[0].userId,
+    spy.userId,
+  );
+
+  await service.submitVote(
+    started.gameId,
+    detectives[1].userId,
+    detectives[0].userId,
+  );
+
+  // Spy disconnects before voting ends.
+  await service.markDisconnected(started.gameId, spy.userId);
+
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phaseEndsAt: new Date(Date.now() - 1000),
+    },
+  });
+
+  const result = await service.resolveRound(started.gameId);
+
+  // Tie means no voting winner.
+  expect(result.outcome).toBe('TIE');
+  expect(result.eliminatedUserId).toBeNull();
+
+  // Now the Spy's disconnection causes termination.
+  expect(result.nextPhase).toBe('TERMINATED');
+  expect(result.finalResult?.winner).toBeNull();
+  expect(result.finalResult?.reason).toBe('SPY_DEPARTED');
+  expect(result.departedUserIds).toEqual([spy.userId]);
+
+  const savedRound = await prisma.gameRound.findUnique({
+    where: {
+      gameId_number: {
+        gameId: started.gameId,
+        number: 1,
+      },
+    },
+  });
+
+  expect(savedRound?.outcome).toBe('TIE');
+  expect(savedRound?.resolvedAt).not.toBeNull();
+
+  const savedSpy = await prisma.gamePlayer.findUnique({
+    where: { id: spy.id },
+  });
+
+  expect(savedSpy?.participationStatus).toBe('DEPARTED');
+
+  const savedGame = await prisma.game.findUnique({
+    where: { id: started.gameId },
+  });
+
+  expect(savedGame?.phase).toBe('TERMINATED');
+  expect(savedGame?.terminationReason).toBe('SPY_DEPARTED');
+});
+
+
+it('keeps roles private during play and reveals the Spy after victory', async () => {
+  const { users, room } = await createFixture();
+
+  const started = await service.startGame({
+    roomId: room.id,
+    participantIds: users.map(user => user.id),
+  });
+
+  const players = await prisma.gamePlayer.findMany({
+    where: { gameId: started.gameId },
+  });
+
+  const spy = players.find(p => p.role === 'SPY')!;
+  const detectives = players.filter(p => p.role === 'DETECTIVE');
+
+  // 1. Retrieve private states while the game is active.
+  const spyBefore = await service.getPlayerState(
+    started.gameId,
+    spy.userId,
+  );
+
+  const detectiveBefore = await service.getPlayerState(
+    started.gameId,
+    detectives[0].userId,
+  );
+
+  // The Spy cannot see the secret word.
+  expect(spyBefore).not.toHaveProperty('secretWord');
+  expect(spyBefore.finalResult).toBeNull();
+
+  // The Detective knows the word, but not the Spy's identity.
+  expect(detectiveBefore.secretWord).toEqual(expect.any(String));
+  expect(detectiveBefore.finalResult).toBeNull();
+
+  for (const player of detectiveBefore.players) {
+    expect(player).not.toHaveProperty('role');
+  }
+
+  // 2. Enter voting with time remaining.
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phase: 'VOTING',
+      phaseEndsAt: new Date(Date.now() + 60_000),
+    },
+  });
+
+  // Both Detectives vote for the Spy.
+  for (const detective of detectives) {
+    await service.submitVote(
+      started.gameId,
+      detective.userId,
+      spy.userId,
+    );
+  }
+
+  // 3. Expire the voting deadline.
+  await prisma.game.update({
+    where: { id: started.gameId },
+    data: {
+      phaseEndsAt: new Date(Date.now() - 1000),
+    },
+  });
+
+  const resolution = await service.resolveRound(started.gameId);
+
+  expect(resolution.nextPhase).toBe('FINISHED');
+  expect(resolution.finalResult?.winner).toBe('DETECTIVES');
+
+  // 4. Both roles must receive the final revelation.
+  for (const userId of [spy.userId, detectives[0].userId]) {
+    const state = await service.getPlayerState(
+      started.gameId,
+      userId,
+    );
+
+    expect(state.phase).toBe('FINISHED');
+
+    expect(state.finalResult).toEqual({
+      gameId: started.gameId,
+      status: 'FINISHED',
+      winner: 'DETECTIVES',
+      reason: null,
+      endedAt: expect.any(String),
+      revelation: {
+        spyUserId: spy.userId,
+        secretWord: detectiveBefore.secretWord,
+      },
+    });
+
+    // The public player list still contains no secret roles.
+    for (const player of state.players) {
+      expect(player).not.toHaveProperty('role');
+    }
+  }
+});
+
   },
 );

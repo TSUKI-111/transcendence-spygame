@@ -20,7 +20,7 @@ import { AuthModule } from '../src/auth/auth.module.js';
 import { CsrfOriginGuard } from '../src/auth/guards/csrf-origin.guard.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
-const TEST_DATABASE = 'spygame_m2_test';
+const TEST_DATABASE = 'transcendence_test';
 const ORIGIN = 'https://localhost:8443';
 
 describe('Authentication — parcours complet', () => {
@@ -29,7 +29,7 @@ describe('Authentication — parcours complet', () => {
   let databaseVerified = false;
 
   const suffix = randomBytes(8).toString('hex');
-  const account = {
+  const account = { 
     username: `auth_${suffix}`,
     displayName: 'Auth Test',
     email: `auth_${suffix}@example.com`,
@@ -44,7 +44,7 @@ describe('Authentication — parcours complet', () => {
       new URL(connectionString).pathname !== `/${TEST_DATABASE}`
     ) {
       throw new Error(
-        'Tests refusés : DATABASE_URL doit cibler spygame_m2_test',
+        'Tests refusés : DATABASE_URL doit cibler transcendence_test',
       );
     }
 
@@ -232,10 +232,12 @@ describe('Authentication — parcours complet', () => {
       .set('Cookie', sessionCookie)
       .expect(401);
 
-    expect(
-      await prisma.session.count({
-        where: { userId: storedUser.id },
-      }),
-    ).toBe(0);
+    const remainingSessions = await prisma.session.count({
+    where: {
+        userId: storedUser.id,
+    },
+    });
+
+    expect(remainingSessions).toBe(0);
   }, 30_000);
 });

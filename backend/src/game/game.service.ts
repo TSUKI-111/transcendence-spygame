@@ -13,6 +13,7 @@ import type {AcceptedClue} from "./contracts/clue.interface.ts";
 import type {RoundResolutionResult} from "./contracts/round-resolution.interface.ts";
 import type {GameFinalResult} from "./contracts/game-final-result.interface.ts";
 import type {LeaveGameResult} from "./contracts/leave-game-result.interface.ts";
+import type {ClientGameResult} from "./contracts/client-game-result.interface.ts";
 
 // Predefined backend word list for the game
 const SECRET_WORDS = ["apple", "banana", "cherry", "ocean", "mountain", "river", "forest", "desert", "city", "village", "pizza", "pasta", "burger"];
@@ -177,6 +178,22 @@ export class GameService
 				currentRoundNumber: true,
 				phaseEndsAt: true,
 				secretWord: true,
+
+				// Information needed when the game ends
+				winner: true,
+				terminationReason: true,
+				endedAt: true,
+
+				players:
+				{
+					select:
+					{
+						userId: true,
+						role: true,
+						participationStatus: true,
+						connectionStatus: true,
+					},
+				},
 			},
 		});
 		if (!game)
@@ -197,6 +214,7 @@ export class GameService
 			},
 			select:
 			{
+				id: true,
 				role: true,
 			},
 		});
@@ -233,6 +251,18 @@ export class GameService
 						},
 					},
 				},
+				votes:
+				{
+					where:
+					{
+						voterGamePlayerId: player.id,
+					},
+					select:
+					{
+						id: true,
+					},
+					take: 1,
+				}
 			},
 		});
 
@@ -250,6 +280,49 @@ export class GameService
 			clue: c.text,
 		}));
 
+		// Build the frontend result only when the game has ended
+		let finalResult: ClientGameResult | null = null;
+
+		if (game.phase === "FINISHED")
+		{
+			const spy = game.players.find(p => p.role === "SPY");
+			if (!spy || !game.winner || !game.endedAt)
+			{
+				throw new Error("INVALID_GAME_STATE");
+			}
+
+			finalResult = 
+			{
+				gameId : game.id,
+				status: "FINISHED",
+				winner: game.winner,
+				reason: null,
+				endedAt: game.endedAt.toISOString(),
+				revelation:
+				{
+					spyUserId: spy.userId,
+					secretWord: game.secretWord,
+				},
+			};
+		}
+		else if (game.phase === "TERMINATED")
+		{
+			if (!game.terminationReason || !game.endedAt)
+			{
+				throw new Error("INVALID_FINAL_STATE");
+			}
+
+			finalResult = 
+			{
+				gameId : game.id,
+				status: "TERMINATED",
+				winner: null,
+				reason: game.terminationReason,
+				endedAt: game.endedAt.toISOString(),
+				revelation: null,
+			};
+		}
+
 		// Build a safe response for this player
 		const state: PlayerGameState =
 		{
@@ -257,9 +330,17 @@ export class GameService
 			phase: game.phase,
 			roundNumber: game.currentRoundNumber,
 			phaseEndsAt: game.phaseEndsAt?.toISOString() ?? null,
+			players: game.players.map(p => (
+			{
+				userId: p.userId,
+				participationStatus: p.participationStatus,
+				connectionStatus: p.connectionStatus,
+			})),
 			role: player.role,
 			clues,
 			hasSubmittedClue: clues.some(c => c.userId === userId),
+			hasSubmittedVote: round.votes.length > 0,
+			finalResult,
 		};
 
 		// Only Detectives receive the secret word
@@ -688,7 +769,14 @@ export class GameService
 			{
 				where:
 				{
-					roundId: round.id
+					roundId: round.id,
+					voter:
+					{
+						is:
+						{
+							participationStatus: 'ACTIVE',
+						}
+					}
 				},
 				select:
 				{
@@ -696,32 +784,17 @@ export class GameService
 				},
 			});
 
-			// Players disconnected at resolution depart.
-			const disconnected = game.players.filter(player => player.participationStatus === 'ACTIVE' && player.connectionStatus === 'DISCONNECTED');
+			// All ACTIVE players are voting candidates. A temporarily disconnected player can still receive votes
+			const activePlayers = game.players.filter(player => player.participationStatus === 'ACTIVE');
 
-			const activePlayers = game.players.filter(player => player.participationStatus === 'ACTIVE' && player.connectionStatus === 'CONNECTED');
+			// Resolve voting BEFORE processing disconnections
+			const result = calculateVotingOutcome(activePlayers, votes);
+			const eliminated = result.eliminated;
 
-			// Departures may terminate the game.
-			let reason: GameFinalResult['reason'] = null;
-
-			if (disconnected.some(player => player.role === 'SPY'))
-			{
-				reason = 'SPY_DEPARTED';
-			}
-			else if (activePlayers.length <= 2)
-			{
-				reason = 'INSUFFICIENT_PLAYERS';
-			}
-
-			// 6. Count votes only if the game can continue.
-			const result = reason === null ? calculateVotingOutcome(activePlayers, votes) : null;
-
-			const eliminated = result?.eliminated ?? null;
-
-			// 7. Determine the winner, if any.
+			// Voting victory takes priority over departures
 			let winner: GameFinalResult['winner'] = null;
 
-			if (reason === null && eliminated)
+			if (eliminated)
 			{
 				if (eliminated.role === 'SPY')
 				{
@@ -730,6 +803,28 @@ export class GameService
 				else if (activePlayers.length - 1 <= 2)
 				{
 					winner = 'SPY';
+				}
+			}
+
+			// Remove the eliminated player from the remaining active-player count
+			const remainingPlayers = activePlayers.filter(player => player.id !== eliminated?.id);
+
+			// Departures are processed ONLY if voting did not already produce a winner
+			const departed = winner === null ? remainingPlayers.filter(player => player.connectionStatus === 'DISCONNECTED') : [];
+
+			const remainingConnected = remainingPlayers.filter(player => player.connectionStatus === 'CONNECTED');
+
+			let reason: GameFinalResult['reason'] = null;
+
+			if (winner === null)
+			{
+				if (departed.some(player => player.role === 'SPY'))
+				{
+					reason = 'SPY_DEPARTED';
+				}
+				else if (remainingConnected.length <= 2)
+				{
+					reason = 'INSUFFICIENT_PLAYERS';
 				}
 			}
 
@@ -767,26 +862,30 @@ export class GameService
 				throw new Error('ROUND_ALREADY_RESOLVED');
 			}
 
-			// Permanently remove disconnected participants from gameplay, but keep their historical records.
-			if (disconnected.length > 0)
+			// Save permanent departures only when there was no winner
+			if (departed.length > 0)
 			{
 				await tx.gamePlayer.updateMany(
 				{
 					where:
 					{
 						gameId,
+						id:
+						{
+							in: departed.map(player => player.id)
+						},
 						participationStatus: 'ACTIVE',
 						connectionStatus: 'DISCONNECTED',
 					},
 					data:
 					{
 						participationStatus: 'DEPARTED',
-					},
+					}
 				});
 			}
 
-			// Save the voting outcome. If the game terminated due to departures, the round remains unresolved.
-			if (reason === null && result)
+			// Voting resolves before any remaining disconnections.
+			if (result)
 			{
 				await tx.gameRound.update(
 				{
@@ -848,7 +947,7 @@ export class GameService
 				outcome: result?.outcome ?? null,
 				eliminatedUserId: eliminated?.userId ?? null,
 				eliminatedRole: eliminated?.role ?? null,
-				departedUserIds: disconnected.map(player => player.userId),
+				departedUserIds: departed.map(player => player.userId),
 				nextPhase,
 				phaseEndsAt: nextDeadline?.toISOString() ?? null,
 				finalResult,
