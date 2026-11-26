@@ -9,11 +9,40 @@ export default function RoomsPage() {
   const [roomName, setRoomName] = useState("");
   const [players, setPlayers] = useState(6);
   const [code, setCode] = useState("");
+  const [isprivate, setIsprivate] = useState(false);
 
-  function handleCreate(e: SubmitEvent<HTMLFormElement>) {
+  const handlecheck = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checkedValue = e.target.checked;
+
+    setIsprivate(checkedValue);
+
+
+  };
+
+  async function handleCreate(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
+    try{
+      const res = await fetch("/api/rooms", {
+        method: "POST",
+        headers: {
+        "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: roomName,
+          maxPlayers: players,
+          is_private: isprivate,
+        })
+      })
+      if(!res.ok) throw new Error("error fetching");
+      const room = await res.json();
+      navigate(`/lobby/${room.room.id}`, {
+  state: { inviteCode: room.inviteCode }
+});
+    }
+    catch{
+      console.log("error hee later");
+    }
     console.log({ roomName, players });
-    navigate("/lobby/1");
   }
 
   function handleJoin(e: SubmitEvent<HTMLFormElement>) {
@@ -72,7 +101,12 @@ export default function RoomsPage() {
                 ))}
               </select>
             </div>
+            <div className="flex flex-row">
             <p className="text-sm text-slate-300">Between 3 and 8 players </p>
+              <label>private ?
+              <input type="checkbox" checked={isprivate} onChange={handlecheck}></input>
+              </label>
+              </div>
             <button
               type="submit"
               className="flex h-12 items-center justify-center rounded-xl bg-violet-500 font-semibold"
