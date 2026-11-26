@@ -196,3 +196,29 @@ Sprint 3:
 - This document and model/migration review are required.
 - The friends API is a stretch goal.
 - Friends UI, online presence and functional room chat are deferred.
+
+## M2 review — 26 November 2026
+
+Reviewed implementation:
+- Friendship commit: 40a877e.
+- Migration: 20261124164254_add_friendships.
+- Migration: 20261111171543_add_chat_messages.
+
+Static review result: the Prisma models and SQL migrations match
+the proposed data design.
+
+Verified:
+- User foreign keys and deletion policies.
+- Prevention of self-friendship.
+- Unique unordered user pairs, including reverse requests.
+- Consistency between friendship status and acceptedAt.
+- Query indexes.
+- Existing chat table, 300-character limit and channel enum.
+
+Runtime verification remains to be confirmed by M5:
+- Migrations on an empty database.
+- Migration on an existing populated test database.
+- Constraint rejection cases and deletion behavior.
+
+This review validates the data structure, not the friends/chat APIs
+or their authorization rules.
