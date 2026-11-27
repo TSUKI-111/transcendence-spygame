@@ -6,11 +6,8 @@ import type {
   RoomPlayerJoinedPayload,
   RoomPlayerLeftPayload,
   RoomHostChangedPayload,
+  RoomGameStartedPayload,
   RoomFinishedPayload,
-  RoomGamePlayerUpdatedPayload,
-  RoomGamePhaseChangedPayload,
-  RoomGameClueSubmittedPayload,
-  RoomGameRoundResolvedPayload,
 } from './room-events.types.js';
 
 @Injectable()
@@ -40,37 +37,16 @@ export class RoomEventsPublisher {
     });
   }
 
+  publishGameStarted(payload: RoomGameStartedPayload): void { 
+    this.eventsSubject.next({
+      event: 'room.game_started',
+      payload,
+    });
+  }
+
   publishRoomFinished(payload: RoomFinishedPayload): void {
     this.eventsSubject.next({
       event: 'room.finished',
-      payload,
-    });
-  }
-
-  publishGamePlayerUpdated(payload: RoomGamePlayerUpdatedPayload): void {
-    this.eventsSubject.next({
-      event: 'room.game_player_updated',
-      payload,
-    });
-  }
-
-  publishGamePhaseChanged(payload: RoomGamePhaseChangedPayload): void {
-    this.eventsSubject.next({
-      event: 'room.game_phase_changed',
-      payload,
-    });
-  }
-
-  publishGameClueSubmitted(payload: RoomGameClueSubmittedPayload): void {
-    this.eventsSubject.next({
-      event: 'room.game_clue_submitted',
-      payload,
-    });
-  }
-
-  publishGameRoundResolved(payload: RoomGameRoundResolvedPayload): void {
-    this.eventsSubject.next({
-      event: 'room.game_round_resolved',
       payload,
     });
   }
