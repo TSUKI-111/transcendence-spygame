@@ -29,84 +29,96 @@ export class RoomsService implements OnModuleInit, OnModuleDestroy {
     private readonly gameEventsService: GameEventsService,
   ) {}
 
-  private handleGamePlayerUpdated(
-    event: Extract<GameEvent, { name: 'game.player_updated' }>,
-  ): void {
-    this.roomEventPublisher.publishGamePlayerUpdated({
-      roomId: event.roomId,
-      gameId: event.payload.gameId,
-      userId: event.payload.userId,
-      ...('participationStatus' in event.payload
-        ? {
-            participationStatus: event.payload.participationStatus,
-          }
-        : {
-            connectionStatus: event.payload.connectionStatus,
-          }),
-    });
-  }
+  // private handleGamePlayerUpdated(
+  //   event: Extract<GameEvent, { name: 'game.player_updated' }>,
+  // ): void {
+  //   this.roomEventPublisher.publishGamePlayerUpdated({
+  //     roomId: event.roomId,
+  //     gameId: event.payload.gameId,
+  //     userId: event.payload.userId,
+  //     ...('participationStatus' in event.payload
+  //       ? {
+  //           participationStatus: event.payload.participationStatus,
+  //         }
+  //       : {
+  //           connectionStatus: event.payload.connectionStatus,
+  //         }),
+  //   });
+  // }
 
-  private handleGamePhaseChanged(
-    event: Extract<GameEvent, { name: 'game.phase_changed' }>,
-  ): void {
-    this.roomEventPublisher.publishGamePhaseChanged({
-      roomId: event.roomId,
-      gameId: event.payload.gameId,
-      phase: event.payload.phase,
-      roundNumber: event.payload.roundNumber,
-      phaseEndsAt: event.payload.phaseEndsAt,
-    });
-  }
+  // private handleGamePhaseChanged(
+  //   event: Extract<GameEvent, { name: 'game.phase_changed' }>,
+  // ): void {
+  //   this.roomEventPublisher.publishGamePhaseChanged({
+  //     roomId: event.roomId,
+  //     gameId: event.payload.gameId,
+  //     phase: event.payload.phase,
+  //     roundNumber: event.payload.roundNumber,
+  //     phaseEndsAt: event.payload.phaseEndsAt,
+  //   });
+  // }
 
-  private handleGameClueSubmitted(
-    event: Extract<GameEvent, { name: 'game.clue_submitted' }>,
-  ): void {
-    this.roomEventPublisher.publishGameClueSubmitted({
-      roomId: event.roomId,
-      gameId: event.payload.gameId,
-      roundNumber: event.payload.roundNumber,
-      userId: event.payload.userId,
-      clue: event.payload.clue,
-    });
-  }
+  // private handleGameClueSubmitted(
+  //   event: Extract<GameEvent, { name: 'game.clue_submitted' }>,
+  // ): void {
+  //   this.roomEventPublisher.publishGameClueSubmitted({
+  //     roomId: event.roomId,
+  //     gameId: event.payload.gameId,
+  //     roundNumber: event.payload.roundNumber,
+  //     userId: event.payload.userId,
+  //     clue: event.payload.clue,
+  //   });
+  // }
 
-  private handleGameRoundResolved(
-    event: Extract<GameEvent, { name: 'game.round_resolved' }>,
-  ): void {
-    this.roomEventPublisher.publishGameRoundResolved({
-      roomId: event.roomId,
-      gameId: event.payload.gameId,
-      roundNumber: event.payload.roundNumber,
-      outcome: event.payload.outcome,
-      eliminatedUserId: event.payload.eliminatedUserId,
-      eliminatedRole: event.payload.eliminatedRole,
-    });
-  }
+  // private handleGameRoundResolved(
+  //   event: Extract<GameEvent, { name: 'game.round_resolved' }>,
+  // ): void {
+  //   this.roomEventPublisher.publishGameRoundResolved({
+  //     roomId: event.roomId,
+  //     gameId: event.payload.gameId,
+  //     roundNumber: event.payload.roundNumber,
+  //     outcome: event.payload.outcome,
+  //     eliminatedUserId: event.payload.eliminatedUserId,
+  //     eliminatedRole: event.payload.eliminatedRole,
+  //   });
+  // }
+
+  // onModuleInit(): void {
+  //   this.unsubscribeGameEvents = this.gameEventsService.subscribe(
+  //     async (event: GameEvent) => {
+  //       switch (event.name) {
+  //         case 'game.ended':
+  //           await this.handleGameEnded(event.payload);
+  //           break;
+
+  //         case 'game.player_updated':
+  //           this.handleGamePlayerUpdated(event);
+  //           break;
+  //         case 'game.phase_changed':
+  //           this.handleGamePhaseChanged(event);
+  //           break;
+  //         case 'game.clue_submitted':
+  //           this.handleGameClueSubmitted(event);
+  //           break;
+  //         case 'game.round_resolved':
+  //           this.handleGameRoundResolved(event);
+  //           break;
+  //       }
+  //     },
+  //   );
+  // }
+
 
   onModuleInit(): void {
     this.unsubscribeGameEvents = this.gameEventsService.subscribe(
       async (event: GameEvent) => {
-        switch (event.name) {
-          case 'game.ended':
-            await this.handleGameEnded(event.payload);
-            break;
-
-          case 'game.player_updated':
-            this.handleGamePlayerUpdated(event);
-            break;
-          case 'game.phase_changed':
-            this.handleGamePhaseChanged(event);
-            break;
-          case 'game.clue_submitted':
-            this.handleGameClueSubmitted(event);
-            break;
-          case 'game.round_resolved':
-            this.handleGameRoundResolved(event);
-            break;
+        if (event.name === 'game.ended') {
+          await this.handleGameEnded(event.payload);
         }
       },
     );
   }
+
 
   onModuleDestroy(): void {
     this.unsubscribeGameEvents?.();
@@ -689,7 +701,16 @@ export class RoomsService implements OnModuleInit, OnModuleDestroy {
         throw error;
       }
 
-      // 4. Return room information and the game initialization data.
+      // 4. Notify connected lobby players that the game started.
+      this.roomEventPublisher.publishGameStarted({
+        roomId,
+        gameId: game.gameId,
+        phase: game.phase,
+        roundNumber: game.roundNumber,
+        phaseEndsAt: game.phaseEndsAt,
+      });
+
+      // 5. Return room information and the host.
       return {
         ...reservedRoom,
         game,

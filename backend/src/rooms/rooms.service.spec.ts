@@ -1170,6 +1170,33 @@ describe('RoomsService', () => {
 
       expect(roomUpdateMock).not.toHaveBeenCalled();
     });
+
+    it('publishes room.game_started after a successful start', async () => {
+      const receivedEvents: RoomEvent[] = [];
+    
+      const subscription = roomEventsPublisher.events$.subscribe(
+        event => receivedEvents.push(event),
+      );
+    
+      try {
+        await roomsService.startRoom(roomId, hostId);
+      
+        expect(receivedEvents).toEqual([
+          {
+            event: 'room.game_started',
+            payload: {
+              roomId,
+              gameId: '00000000-0000-4000-8000-000000000099',
+              phase: 'CLUE_SUBMISSION',
+              roundNumber: 1,
+              phaseEndsAt: '2026-11-22T19:00:00.000Z',
+            },
+          },
+        ]);
+      } finally {
+        subscription.unsubscribe();
+      }
+    });
   });
   describe('leaveRoom', () => {
     const roomId = '550e8400-e29b-41d4-a716-446655440000';

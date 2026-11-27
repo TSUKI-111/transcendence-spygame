@@ -1,8 +1,22 @@
 **Game Engine & Gameplay UI Integration**
 
-**Status:** M1–M3 data contracts agreed.
-**Implementation:** M1 GameService contracts implemented and tested.
-**Pending:** WebSocket Gateway integration and frontend delivery.
+
+**Status:** Realtime event ownership and contracts finalized by M1.
+
+**Implemented:**
+- Internal GameEventsService and gameplay event definitions.
+- RoomGateway room-event delivery.
+- room.game_started and room.finished.
+- GameService private state and gameplay action methods.
+
+**Pending M5:**
+- GameGateway implementation.
+- Public gameplay event delivery.
+- Private game.state delivery.
+- Socket.IO gameplay actions.
+- Disconnection and reconnection integration.
+- Gameplay Gateway security and tests.
+
 
 ## 1. Purpose and Scope
 
@@ -13,6 +27,64 @@
 - Public events are shared with authorized game participants.
 - Private data is delivered only to the authenticated player entitled to receive it.
 - The server validates all gameplay actions; frontend checks are for user experience only.
+
+## Final Realtime Event Architecture
+
+### Module Responsibilities
+
+- M1 owns gameplay event definitions and the Game Engine.
+- M5 implements GameGateway and delivers gameplay events through Socket.IO.
+- M4 owns room events and room lifecycle notifications.
+- M3 consumes public events and requests private game state.
+
+### Public Room Events — M4
+
+| Event | Purpose |
+|---|---|
+| `room.game_started` | Notify lobby members that a game has started |
+| `room.finished` | Notify room members that the room's game ended |
+
+These events are delivered by the existing RoomGateway.
+
+### Public Gameplay Events — M1/M5
+
+| Event | Purpose |
+|---|---|
+| `game.phase_changed` | Phase and deadline changes |
+| `game.clue_submitted` | Accepted clue |
+| `game.round_resolved` | Voting result and elimination |
+| `game.player_updated` | Player participation or connection changes |
+| `game.ended` | Final game status and outcome, without secret revelation |
+
+These events originate from GameEventsService.
+
+M5's GameGateway will broadcast them to authorized game participants.
+
+The GameGateway must not create a second copy of room events.
+
+### Private Gameplay Event — M1/M5
+
+`game.state` contains the authenticated player's authorized game state.
+
+Only this player's socket receives the response. It is never broadcast to the whole room.
+
+### Gameplay Actions — M5
+
+- `game.get_state`
+- `game.submit_clue`
+- `game.submit_vote`
+
+M5 implements these using the existing GameService methods.
+
+### Important Rules
+
+- Gameplay events must not be forwarded by RoomsService.
+- RoomGateway remains responsible for room events.
+- GameGateway is responsible for gameplay event delivery.
+- GameEventsService remains the internal source of gameplay events.
+- A gameplay event must be broadcast only once.
+- No secret roles, secret words, or private votes are exposed through public gameplay events.
+- The Spy's identity and secret word are revealed only through authorized final game state after FINISHED.
 
 ## 2. Game Phases
 
