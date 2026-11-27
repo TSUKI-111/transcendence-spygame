@@ -67,6 +67,8 @@ describe('RoomsController (e2e)', () => {
             publishPlayerJoined: vi.fn(),
             publishPlayerLeft: vi.fn(),
             publishHostChanged: vi.fn(),
+            publishGameStarted: vi.fn(),
+            publishRoomFinished: vi.fn(),
           },
         },
         {
