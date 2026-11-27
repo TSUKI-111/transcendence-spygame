@@ -18,6 +18,24 @@ export default function RoomsPage() {
   const [state, setState] = useState<"loading" | "error" | "ready">("loading");
 
   const navigate = useNavigate();
+
+  async function joinRoom(roomId: string) {
+  try {
+    const response = await fetch(`/api/rooms/${roomId}/join`, {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to join room");
+    }
+
+    navigate(`/lobby/${roomId}`);
+  } catch (error) {
+    console.error("Join room failed:", error);
+  }
+}
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -70,7 +88,7 @@ export default function RoomsPage() {
             <button
               type="button"
               className="h-12 shrink-0 rounded-xl bg-violet-500 px-6 font-semibold"
-              onClick={() => navigate(`/lobby/${room.id}`)}
+              onClick={() => joinRoom(room.id)}
             >
               Join Room
             </button>

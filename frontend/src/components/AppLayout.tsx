@@ -4,6 +4,7 @@ import roomsimg from "../assets/icons/rooms.png";
 import playimg from "../assets/icons/crown.png";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 const links = [
   { to: "/", label: "Home", img: homeimg },
@@ -12,15 +13,15 @@ const links = [
 ];
 
 export default function AppLayout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isInLobby = location.pathname.startsWith("/lobby/");
 
-
-  const {user, logout } = useAuth();
-const navigate = useNavigate();   // import it from react-router-dom
-
-async function handleLogout() {
-  await logout();
-  navigate("/login");
-}
+  async function handleLogout() {
+    await logout();
+    navigate("/login");
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
@@ -31,12 +32,14 @@ async function handleLogout() {
         <h1>{user?.username}</h1>
         <nav className="flex flex-1 flex-col gap-1 mt-10">
           {links.map((link) => (
-            <div className=" flex flex-row items-center">
-              <img src={link.img} className="h-6 w-6"/>
+            <div key={link.to} className="flex flex-row items-center">
+              <img src={link.img} className="h-6 w-6" />
               <NavLink
-                key={link.to}
                 to={link.to}
                 end
+                onClick={(e) => {
+                  if (isInLobby) e.preventDefault();
+                }}
                 className={({ isActive }) =>
                   "rounded-lg px-3 py-2 my-1 w-full ml-1 " +
                   (isActive
@@ -49,7 +52,10 @@ async function handleLogout() {
             </div>
           ))}
         </nav>
-        <button onClick={handleLogout} className="rounded-lg px-3 py-2 text-left text-slate-300 hover:bg-slate-800">
+        <button
+          onClick={handleLogout}
+          className="rounded-lg px-3 py-2 text-left text-slate-300 hover:bg-slate-800"
+        >
           Logout
         </button>
       </aside>

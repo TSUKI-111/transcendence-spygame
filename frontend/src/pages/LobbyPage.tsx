@@ -1,12 +1,10 @@
 import { useState } from "react";
-import {
-  useNavigate,
-} from "react-router-dom";
-import img from "../assets/vite.svg";
+import { useNavigate } from "react-router-dom";
 import crownimg from "../assets/icons/crown.png";
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useLocation } from "react-router-dom";
+import { socket } from "../socket";
 
 type RoomPlayer = {
   id: number;
@@ -25,32 +23,65 @@ type Room = {
 };
 
 export default function LobbyPage() {
+  console.log("LOBBY COMPONENT RENDERED");
   const navigate = useNavigate();
   const [room, setRoom] = useState<Room | null>(null);
-  const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const { id } = useParams();
+  const { roomId } = useParams();
   const location = useLocation();
   const inviteCode = location.state?.inviteCode;
 
+  async function leaveRoom(roomId: string) {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/leave`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to leave room");
+      }
+
+      navigate(`/play`);
+    } catch (error) {
+      console.error("leave  room failed:", error);
+    }
+  }
+
   useEffect(() => {
-    if (!id) return;
+  if (!roomId) return;
+
+  function joinRoom() {
+    socket.emit("room.join", { roomId });
+  }
+
+  socket.on("connect", joinRoom);
+
+  if (socket.connected) joinRoom();
+  else socket.connect();
+
+  return () => {
+    socket.off("connect", joinRoom);
+  };
+}, [roomId]);
+
+  useEffect(() => {
+    console.log("invite code ", inviteCode);
+
+    if (!roomId) return;
     async function fetchData() {
       try {
-        const res = await fetch(`/api/rooms/${id}`);
+        const res = await fetch(`/api/rooms/${roomId}`);
         if (!res.ok) throw new Error("error fetching");
-        const data: Room = await res.json();
 
+        const data = await res.json();
+        console.log("ROOM API RESPONSE:", data);
         setRoom(data);
-        setHostId(data.host.id);
-        setPlayers(data.players);
       } catch (error) {
-  console.error("Failed to fetch room:", error);
-}
+        console.error("Failed to fetch room:", error);
+      }
     }
     fetchData();
-  }, [id]);
-
-  
+  }, [roomId]);
 
   function Slot({ player }: { player: RoomPlayer | null }) {
     if (player === null) {
@@ -74,19 +105,21 @@ export default function LobbyPage() {
         </div>
         <p className="text-sm font-semibold">{player.displayName}</p>
         <p className="text-xs text-lime-300">
-          {player.id === hostId ? "host" : ""}
+          {player.id === room?.host.id ? "host" : ""}
         </p>
       </div>
     );
   }
 
-  const emptySlots = maxPlayers - players.length;
+  const emptySlots = room ? room.maxPlayers - room.players.length : 0;
 
-const host = room?.host;
+  const host = room?.host;
   const slots: (RoomPlayer | null)[] = [
-    ...players,
+    ...(room ? room.players : []),
     ...Array.from({ length: emptySlots }, () => null),
   ];
+
+  if (!room) return <p>Loading room...</p>;
 
   return (
     <main className="flex flex-col gap-6 p-8 text-white">
@@ -101,7 +134,9 @@ const host = room?.host;
             <div className="flex items-center gap-4 rounded-xl border border-violet-500/50 bg-slate-900 px-4 py-2">
               <div>
                 <p className="text-xs text-slate-300">lobby's code</p>
-                <p className="font-mono text-lg">{inviteCode ?? "Unavailable"}</p>
+                <p className="font-mono text-lg">
+                  {inviteCode ?? "Unavailable"}
+                </p>
               </div>
               <button
                 type="button"
@@ -154,7 +189,7 @@ const host = room?.host;
         <button
           type="button"
           className="h-12 flex-1 rounded-xl border border-red-500/50 font-semibold text-red-400"
-          onClick={() => navigate("/rooms")}
+          onClick={() => room && leaveRoom(room.id)}
         >
           Leave
         </button>
