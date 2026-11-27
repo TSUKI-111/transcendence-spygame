@@ -29,7 +29,7 @@ describe('Authentication — parcours complet', () => {
   let databaseVerified = false;
 
   const suffix = randomBytes(8).toString('hex');
-  const account = { 
+  const account = {
     username: `auth_${suffix}`,
     displayName: 'Auth Test',
     email: `auth_${suffix}@example.com`,
@@ -43,9 +43,9 @@ describe('Authentication — parcours complet', () => {
       !connectionString ||
       new URL(connectionString).pathname !== `/${TEST_DATABASE}`
     ) {
-      throw new Error(
+        throw new Error(
         'Tests refusés : DATABASE_URL doit cibler transcendence_test',
-      );
+        );
     }
 
     vi.stubEnv('APP_ORIGIN', ORIGIN);
@@ -233,11 +233,175 @@ describe('Authentication — parcours complet', () => {
       .expect(401);
 
     const remainingSessions = await prisma.session.count({
-    where: {
+      where: {
         userId: storedUser.id,
-    },
+      },
     });
 
     expect(remainingSessions).toBe(0);
+  }, 30_000);
+
+
+    it('un utilisateur modifie uniquement son propre profil', async () => {
+    if (!app || !databaseVerified) {
+      throw new Error('Application ou base de test non initialisée');
+    }
+
+    const server = app.getHttpServer();
+    const testSuffix = randomBytes(8).toString('hex');
+
+    const accountA = {
+      username: `profile_a_${testSuffix}`,
+      displayName: 'Profile A',
+      email: `profile_a_${testSuffix}@example.com`,
+      password: 'Une phrase secrete pour tester',
+    };
+
+    const accountB = {
+      username: `profile_b_${testSuffix}`,
+      displayName: 'Profile B',
+      email: `profile_b_${testSuffix}@example.com`,
+      password: 'Une phrase secrete pour tester',
+    };
+
+    async function loginAccount(
+      credentials: { email: string; password: string },
+    ): Promise<string> {
+      const response = await request(server)
+        .post('/auth/login')
+        .set('Origin', ORIGIN)
+        .send(credentials)
+        .expect(200);
+
+      const rawCookies = response.headers['set-cookie'];
+      const cookies = Array.isArray(rawCookies)
+        ? rawCookies
+        : rawCookies
+          ? [rawCookies]
+          : [];
+
+      const sessionHeader = cookies.find((cookie) =>
+        cookie.startsWith('__Host-spygame_session='),
+      );
+
+      if (!sessionHeader) {
+        throw new Error('Cookie de session absent');
+      }
+
+      return sessionHeader.split(';')[0]!;
+    }
+
+    try {
+      // Deux comptes distincts, créés via la vraie API.
+      const registrationA = await request(server)
+        .post('/auth/register')
+        .set('Origin', ORIGIN)
+        .send(accountA)
+        .expect(201);
+
+      const registrationB = await request(server)
+        .post('/auth/register')
+        .set('Origin', ORIGIN)
+        .send(accountB)
+        .expect(201);
+
+      const idA = registrationA.body.id;
+      const idB = registrationB.body.id;
+
+      expect(idA).toEqual(expect.any(Number));
+      expect(idB).toEqual(expect.any(Number));
+      expect(idA).not.toBe(idB);
+
+      const cookieA = await loginAccount({
+        email: accountA.email,
+        password: accountA.password,
+      });
+
+      const cookieB = await loginAccount({
+        email: accountB.email,
+        password: accountB.password,
+      });
+
+      const expectedA = {
+        id: idA,
+        username: accountA.username,
+        displayName: 'Profile A Updated',
+        avatarUrl: null,
+      };
+
+      const expectedB = {
+        id: idB,
+        username: accountB.username,
+        displayName: accountB.displayName,
+        avatarUrl: null,
+      };
+
+      // A modifie son propre profil.
+      const updatedA = await request(server)
+        .put('/auth/me')
+        .set('Origin', ORIGIN)
+        .set('Cookie', cookieA)
+        .send({ displayName: '  Profile A Updated  ' })
+        .expect(200);
+
+      expect(updatedA.body).toEqual(expectedA);
+
+      // Le profil de B reste inchangé.
+      const beforeAttackB = await request(server)
+        .get('/auth/me')
+        .set('Cookie', cookieB)
+        .expect(200);
+
+      expect(beforeAttackB.body).toEqual(expectedB);
+
+      // A tente de cibler B en ajoutant id ou userId.
+      // Le ValidationPipe doit refuser ces champs supplémentaires.
+      for (const identityField of ['id', 'userId']) {
+        const rejected = await request(server)
+          .put('/auth/me')
+          .set('Origin', ORIGIN)
+          .set('Cookie', cookieA)
+          .send({
+            displayName: 'Unauthorized Change',
+            [identityField]: idB,
+          })
+          .expect(400);
+
+        expect(rejected.body.message).toContain(
+          `property ${identityField} should not exist`,
+        );
+      }
+
+      // Les requêtes refusées n'ont modifié aucun des deux profils.
+      const finalA = await request(server)
+        .get('/auth/me')
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const finalB = await request(server)
+        .get('/auth/me')
+        .set('Cookie', cookieB)
+        .expect(200);
+
+      expect(finalA.body).toEqual(expectedA);
+      expect(finalB.body).toEqual(expectedB);
+    } finally {
+      // Nettoyage limité aux deux comptes de ce test.
+      // Leurs sessions sont supprimées par ON DELETE CASCADE.
+      await prisma.user.deleteMany({
+        where: {
+          OR: [
+            {
+              email: accountA.email,
+              username: accountA.username,
+            },
+            {
+              email: accountB.email,
+              username: accountB.username,
+            },
+          ],
+        },
+      });
+    }
   }, 30_000);
 });
